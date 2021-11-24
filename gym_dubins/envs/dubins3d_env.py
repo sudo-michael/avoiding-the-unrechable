@@ -84,19 +84,23 @@ class Dubins3DEnv(gym.Env):
 
         done = False
         reward = -np.linalg.norm(self.state[:2] - self.goal_position)
+        info = {'reach_goal': False, 'collide_with_obs': False, 'out_of_bounds': False}
 
         if np.linalg.norm(self.state[:2]) <= self.obstacle_radius + self.robot_radius:
             # collide with obstacle
             done = True
             reward = -100
+            info['collide_with_obs'] = True
         elif np.linalg.norm(self.state[:2] - self.goal_position) <= self.goal_radius + self.robot_radius:
             # reach goal
             done = True
-            reward = 100
+            reward = 1000
+            info['reach_goal'] = True
         elif self.state[0] < -4 or self.state[0] > 4 or self.state[1] < -4 or self.state[1] > 4:
             done = True
+            info['out_of_bounds'] = True
 
-        return self.state, reward, done, {}
+        return self.state, reward, done, info
         
     def render(self, mode='human'):
         plt.cla()
@@ -108,6 +112,9 @@ class Dubins3DEnv(gym.Env):
         plt.plot(self.goal_position[0], self.goal_position[1], "xb")
         obs = plt.Circle(self.obstacle_position, self.obstacle_radius, color='black')
         plt.gcf().gca().add_artist(obs)
+    
+        goal = plt.Circle(self.goal_position, self.goal_radius, color='green')
+        plt.gcf().gca().add_artist(goal)
 
         robot = plt.Circle(self.state[:2], self.robot_radius, color='blue')
         plt.gcf().gca().add_artist(robot)
@@ -138,9 +145,9 @@ def main():
     done = False
     for i in range(100):
         if i % 2 == 0:
-            state, reward, done, _ = env.step(1)
+            state, reward, done, _ = env.step([1])
         else:
-            state, reward, done, _ = env.step(-1)
+            state, reward, done, _ = env.step([-1])
         print(state, reward)
         env.render()
 

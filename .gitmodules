@@ -1,3 +1,6 @@
 [submodule "optimized_dp"]
 	path = optimized_dp
 	url = git@github.com:SFU-MARS/optimized_dp.git
+[submodule "pytorch-soft-actor-critic"]
+	path = pytorch-soft-actor-critic
+	url = git@github.com:sudo-michael/pytorch-soft-actor-critic.git
