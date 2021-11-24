@@ -10,7 +10,10 @@ class Dubins3DEnv(gym.Env):
     """
     Description:
         The agent (a car) starts at (-3, -3) and needs to reach a goal at (3, 3) while avoiding
-        an obstacle at (0, 0) of radius 0.75
+        an obstacle at (0, 0) of radius 0.75. The episode ends when the robot either
+        1. reaches the goal
+        2. reaches the obstacles
+        3. leaves the boundary of the grid [-4, -4] x [4, 4]
     Observation:
         Type: Box(4)
         Num    Observation               Min            Max
@@ -35,6 +38,14 @@ class Dubins3DEnv(gym.Env):
 
         self.obstacle_position = np.array([0, 0])
         self.obstacle_radius = 0.75
+
+        self.boundary = np.array([
+            [-4, 4, -4, -4], 
+            [-4, 4,  4, 4], 
+            [-4, -4, -4, 4], 
+            [4, 4, -4, 4], 
+            ]
+        )
 
         # dynamics
         self.max_w = 1.0
@@ -72,6 +83,8 @@ class Dubins3DEnv(gym.Env):
         self.state[2] = ((self.state[2] + np.pi) % (2 * np.pi)) - np.pi
 
         done = False
+        reward = -np.linalg.norm(self.state[:2] - self.goal_position)
+
         if np.linalg.norm(self.state[:2]) <= self.obstacle_radius + self.robot_radius:
             # collide with obstacle
             done = True
@@ -80,8 +93,8 @@ class Dubins3DEnv(gym.Env):
             # reach goal
             done = True
             reward = 100
-        else:
-            reward = -np.linalg.norm(self.state[:2] - self.goal_position)
+        elif self.state[0] < -4 or self.state[0] > 4 or self.state[1] < -4 or self.state[1] > 4:
+            done = True
 
         return self.state, reward, done, {}
         
@@ -100,6 +113,9 @@ class Dubins3DEnv(gym.Env):
         plt.gcf().gca().add_artist(robot)
         dir = self.state[:2] + np.array([np.cos(self.state[2]), np.sin(self.state[2])]) * self.robot_radius
         plt.plot([self.state[0], dir[0]], [self.state[1], dir[1]], "-k")
+
+        for i in range(len(self.boundary)):
+            plt.plot([self.boundary[i][0], self.boundary[i][1]], [self.boundary[i][2], self.boundary[i][3]], "-k")
 
         plt.axis("equal")
         plt.grid(True)

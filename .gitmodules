@@ -1,0 +1,3 @@
+[submodule "optimized_dp"]
+	path = optimized_dp
+	url = git@github.com:SFU-MARS/optimized_dp.git
