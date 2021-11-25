@@ -98,6 +98,9 @@ parser.add_argument('--cuda', action="store_true", default=True,
                     help='run on CUDA (default: True)')
 args = parser.parse_args()
 
+def save_agent(agent, steps):
+    agent.save_checkpoint(args.env_name, f"steps_{steps}")
+
 def main():
     # Environment
     # env = NormalizedActions(gym.make(args.env_name))
@@ -122,6 +125,7 @@ def main():
     # Training Loop
     total_numsteps = 0
     updates = 0
+    collisions = 0
 
     for i_episode in itertools.count(1):
         episode_reward = 0
@@ -148,10 +152,12 @@ def main():
                     writer.add_scalar('entropy_temprature/alpha', alpha, updates)
                     updates += 1
 
-            next_state, reward, done, _ = env.step(action) # Step
+            next_state, reward, done, info = env.step(action) # Step
             episode_steps += 1
             total_numsteps += 1
             episode_reward += reward
+
+            collisions += 1 if info['collide_with_obs']  else 0
 
             # Ignore the "done" signal if it comes from hitting the time horizon.
             # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
@@ -162,9 +168,15 @@ def main():
             state = next_state
 
         if total_numsteps > args.num_steps:
+            save_agent(agent, total_numsteps)
             break
 
+        if i_episode % 1000 == 0:
+            save_agent(agent, total_numsteps)
+
+
         writer.add_scalar('reward/train', episode_reward, i_episode)
+        writer.add_scalar('safe/obs_collision', collisions, i_episode)
         print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2)))
 
         if i_episode % 50 == 0 and args.eval is True and len(memory) > args.batch_size:
@@ -176,8 +188,6 @@ def main():
                 done = False
                 while not done:
                     action = agent.select_action(state, evaluate=True)
-
-                    env.render()
                     next_state, reward, done, _ = env.step(action)
                     episode_reward += reward
 
@@ -195,5 +205,48 @@ def main():
 
     env.close()
 
+def run_model_at_checkpoint(path_to_checkpoint):
+    env = gym.make(args.env_name)
+    env = gym.wrappers.TimeLimit(env, 150)
+    env.seed(args.seed)
+    env.action_space.seed(args.seed)
+
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
+    # Agent
+    agent = SAC(env.observation_space.shape[0], env.action_space, args)
+    agent.run_model_at_checkpoint('./checkpoints/sac_checkpoint_dubins3d-v0_steps_1000033')
+    memory = ReplayMemory(args.replay_size, args.seed)
+
+    # Training Loop
+    total_numsteps = 0
+    updates = 0
+    collisions = 0
+
+    for i_episode in itertools.count(1):
+        episode_reward = 0
+        episode_steps = 0
+        done = False
+        state = env.reset()
+
+        episode_reward = 0
+        done = False
+        while not done:
+            env.render()
+            action = agent.select_action(state, evaluate=True)
+            next_state, reward, done, _ = env.step(action)
+            episode_reward += reward
+
+
+        print("----------------------------------------")
+        print("Test Episodes: {}, Avg. Reward: {}".format(i_episode, round(episode_reward, 2)))
+        print("----------------------------------------")
+
+    env.close()
+
+
 if __name__ in "__main__":
-    main()
+    # main()
+    run_model_at_checkpoint('./checkpoints/sac_checkpoint_dubins3d-v0_steps_1000033')
+
