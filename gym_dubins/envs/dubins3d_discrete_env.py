@@ -5,6 +5,7 @@ from gym.spaces import Discrete, Box
 from gym.utils import seeding
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 
 class Dubins3DDiscreteEnv(gym.Env):
     """
@@ -30,8 +31,13 @@ class Dubins3DDiscreteEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
-        self.inital_position = np.array([-3.0, -3.0, 0], dtype=np.float32)
+        # self.inital_position = np.array([-3.0, -3.0, 0], dtype=np.float32)
         # self.inital_position = np.array([2.0, 2.0, 0], dtype=np.float32)
+        self.inital_position = [
+            np.array([-2.0, 2.0, 0], dtype=np.float32),
+            np.array([2.0, -2.0, 0], dtype=np.float32)
+        ]
+
         self.robot_radius = 0.4
 
         self.goal_position = np.array([3, 3])
@@ -67,7 +73,8 @@ class Dubins3DDiscreteEnv(gym.Env):
         return [seed]
 
     def reset(self):
-        self.state = self.inital_position.copy()
+        # self.state = self.inital_position.copy()
+        self.state = random.choice(self.inital_position).copy()
         return self.state
 
     def step(self, action):
@@ -96,7 +103,7 @@ class Dubins3DDiscreteEnv(gym.Env):
         if np.linalg.norm(self.state[:2]) <= self.obstacle_radius + self.robot_radius:
             # collide with obstacle
             done = True
-            reward = -100
+            reward = -1000
             info['collide_with_obs'] = True
         elif np.linalg.norm(self.state[:2] - self.goal_position) <= self.goal_radius + self.robot_radius:
             # reach goal
