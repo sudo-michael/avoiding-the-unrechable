@@ -6,7 +6,7 @@ from gym.utils import seeding
 import numpy as np
 import matplotlib.pyplot as plt
 
-class Dubins3DEnv(gym.Env):
+class Dubins3DSparseEnv(gym.Env):
     """
     Description:
         The agent (a car) starts at (-3, -3) and needs to reach a goal at (3, 3) while avoiding
@@ -30,12 +30,12 @@ class Dubins3DEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
-        self.inital_position = np.array([-3.0, -3.0, 0], dtype=np.float32)
-        # self.inital_position = np.array([2.0, 2.0, 0], dtype=np.float32)
+        # self.inital_position = np.array([-3.0, -3.0, np.pi/4], dtype=np.float32)
+        self.inital_position = np.array([1.8, 1.8, 0], dtype=np.float32)
         self.robot_radius = 0.4
 
         self.goal_position = np.array([3, 3])
-        self.goal_radius = 0.5
+        self.goal_radius = 0.75
 
         self.obstacle_position = np.array([0, 0])
         self.obstacle_radius = 0.75
@@ -84,23 +84,22 @@ class Dubins3DEnv(gym.Env):
         self.state[2] = ((self.state[2] + np.pi) % (2 * np.pi)) - np.pi
 
         done = False
-        reward = -np.linalg.norm(self.state[:2] - self.goal_position)
-        # reward = 0.0
+        reward = 0.0
         info = {'reach_goal': False, 'collide_with_obs': False, 'out_of_bounds': False}
 
         if np.linalg.norm(self.state[:2]) <= self.obstacle_radius + self.robot_radius:
             # collide with obstacle
             done = True
-            reward = -100
+            reward = -1
             info['collide_with_obs'] = True
         elif np.linalg.norm(self.state[:2] - self.goal_position) <= self.goal_radius + self.robot_radius:
             # reach goal
             done = True
-            reward = 1000
+            reward = 1
             info['reach_goal'] = True
         elif self.state[0] < -4 or self.state[0] > 4 or self.state[1] < -4 or self.state[1] > 4:
             done = True
-            reward = -1000
+            reward = -1
             info['out_of_bounds'] = True
 
         return self.state, reward, done, info
@@ -141,18 +140,14 @@ def main():
     import random
     random.seed(0)
 
-    import time
-    env = Dubins3DEnv()
+    env = Dubins3DSparseEnv()
     state = env.reset()
     env.render()
     done = False
     for i in range(100):
-        state, reward, done, _ = env.step(env.action_space.sample())
+        state, reward, done, _ = env.step([1])
         print(state, reward)
         env.render()
-
-        if done:
-            break
 
 
 if __name__ == "__main__":

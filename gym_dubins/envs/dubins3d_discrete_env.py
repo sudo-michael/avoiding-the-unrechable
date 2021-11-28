@@ -6,7 +6,7 @@ from gym.utils import seeding
 import numpy as np
 import matplotlib.pyplot as plt
 
-class Dubins3DEnv(gym.Env):
+class Dubins3DDiscreteEnv(gym.Env):
     """
     Description:
         The agent (a car) starts at (-3, -3) and needs to reach a goal at (3, 3) while avoiding
@@ -55,6 +55,7 @@ class Dubins3DEnv(gym.Env):
 
         self.action_space = Box(low=-self.max_w, high=self.max_w, dtype=np.float32,
                                      shape=(1,))
+        self.action_space = Discrete(2)
         self.observation_space = Box(low=-np.inf, high=np.inf, dtype=np.float32,
                                      shape=(3,))
 
@@ -71,7 +72,11 @@ class Dubins3DEnv(gym.Env):
 
     def step(self, action):
         x, y, theta = self.state
-        w = np.clip(action[0], -self.max_w, self.max_w)
+        # w = np.clip(action[0], -self.max_w, self.max_w)
+        if action == 0:
+            w = self.max_w
+        else:
+            w = -self.max_w
 
         x_dot = self.velocity * np.cos(theta)
         y_dot = self.velocity * np.sin(theta)
