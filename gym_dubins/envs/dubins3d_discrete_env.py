@@ -3,6 +3,7 @@
 import gym
 from gym.spaces import Discrete, Box
 from gym.utils import seeding
+from gym.wrappers import Monitor
 import numpy as np
 import matplotlib.pyplot as plt
 import random
@@ -17,10 +18,10 @@ class Dubins3DDiscreteEnv(gym.Env):
         3. leaves the boundary of the grid [-4, -4] x [4, 4]
     Observation:
         Type: Box(4)
-        Num    Observation               Min            Max
-        0      x
-        1      y
-        2      theta                    -pi             pi
+        Num    Observation              Min            Max
+        0      x                        -4             4
+        1      y                        -4             4
+        2      theta                    -pi            pi
     Actions:
         Type: Box(1)
         Num    Action                    Min            Max
@@ -28,16 +29,10 @@ class Dubins3DDiscreteEnv(gym.Env):
     Reward:
          Episode length is greater than 150
     """
-    metadata = {'render.modes': ['human']}
+    metadata = {'render.modes': ['human', 'rgb_array']}
 
     def __init__(self):
-        # self.inital_position = np.array([-3.0, -3.0, 0], dtype=np.float32)
-        # self.inital_position = np.array([2.0, 2.0, 0], dtype=np.float32)
-        self.inital_position = [
-            np.array([-2.0, 2.0, 0], dtype=np.float32),
-            np.array([2.0, -2.0, 0], dtype=np.float32)
-        ]
-
+        self.inital_position = np.array([-3.0, -3.0, 0], dtype=np.float32)
         self.robot_radius = 0.4
 
         self.goal_position = np.array([3, 3])
@@ -73,13 +68,11 @@ class Dubins3DDiscreteEnv(gym.Env):
         return [seed]
 
     def reset(self):
-        # self.state = self.inital_position.copy()
-        self.state = random.choice(self.inital_position).copy()
+        self.state = self.inital_position.copy()
         return self.state
 
     def step(self, action):
         x, y, theta = self.state
-        # w = np.clip(action[0], -self.max_w, self.max_w)
         if action == 0:
             w = self.max_w
         else:
@@ -97,7 +90,6 @@ class Dubins3DDiscreteEnv(gym.Env):
 
         done = False
         reward = -np.linalg.norm(self.state[:2] - self.goal_position)
-        # reward = 0.0
         info = {'reach_goal': False, 'collide_with_obs': False, 'out_of_bounds': False}
 
         if np.linalg.norm(self.state[:2]) <= self.obstacle_radius + self.robot_radius:
@@ -113,6 +105,7 @@ class Dubins3DDiscreteEnv(gym.Env):
         elif self.state[0] < -4 or self.state[0] > 4 or self.state[1] < -4 or self.state[1] > 4:
             done = True
             reward = -1000
+            # reward = 0
             info['out_of_bounds'] = True
 
         return self.state, reward, done, info
@@ -141,12 +134,19 @@ class Dubins3DDiscreteEnv(gym.Env):
 
         plt.axis("equal")
         plt.grid(True)
-        plt.pause(0.001)
+        plt.gcf().tight_layout(pad=0)
 
-        # if mode == 'rgb_array':
-        #     image_from_plot = np.frombuffer(plt.gcf().canvas.tostring_rgb(), dtype=np.uint8)
-        #     image_from_plot = image_from_plot.reshape(plt.gcf().canvas.get_width_height()[::-1] + (3,))
-        #     return image_from_plot
+        if mode == 'rgb_array':
+            plt.gcf().canvas.draw()
+            data = np.frombuffer(plt.gcf().canvas.tostring_rgb(), dtype=np.uint8)
+            w, h = plt.gcf().canvas.get_width_height()
+            im = data.reshape((h, w, -1))
+            return im
+        else:
+            plt.pause(0.001)
+
+    def close(self):
+        pass
 
 
 def main():
@@ -154,17 +154,20 @@ def main():
     random.seed(0)
 
     import time
-    env = Dubins3DEnv()
+    env = Dubins3DDiscreteEnv()
+    env = Monitor(env, './tmp', force=True)
     state = env.reset()
-    env.render()
+    env.render(mode='rgb_array')
     done = False
     for i in range(100):
         state, reward, done, _ = env.step(env.action_space.sample())
         print(state, reward)
-        env.render()
+        env.render(mode='rgb_array')
 
         if done:
             break
+
+    env.close()
 
 
 if __name__ == "__main__":

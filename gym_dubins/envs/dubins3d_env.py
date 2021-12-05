@@ -91,7 +91,7 @@ class Dubins3DEnv(gym.Env):
         if np.linalg.norm(self.state[:2]) <= self.obstacle_radius + self.robot_radius:
             # collide with obstacle
             done = True
-            reward = -100
+            reward = -1000
             info['collide_with_obs'] = True
         elif np.linalg.norm(self.state[:2] - self.goal_position) <= self.goal_radius + self.robot_radius:
             # reach goal
