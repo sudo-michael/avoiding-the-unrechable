@@ -4,3 +4,6 @@
 [submodule "pytorch-soft-actor-critic"]
 	path = pytorch-soft-actor-critic
 	url = git@github.com:sudo-michael/pytorch-soft-actor-critic.git
+[submodule "cleanrl"]
+	path = cleanrl
+	url = git@github.com:sudo-michael/cleanrl.git
