@@ -27,7 +27,7 @@ class Dubins3DEnv(gym.Env):
     Reward:
          Episode length is greater than 150
     """
-    metadata = {'render.modes': ['human']}
+    metadata = {'render.modes': ['human', 'rgb_array']}
 
     def __init__(self):
         self.inital_position = np.array([-3.0, -3.0, 0], dtype=np.float32)
@@ -85,7 +85,6 @@ class Dubins3DEnv(gym.Env):
 
         done = False
         reward = -np.linalg.norm(self.state[:2] - self.goal_position)
-        # reward = 0.0
         info = {'reach_goal': False, 'collide_with_obs': False, 'out_of_bounds': False}
 
         if np.linalg.norm(self.state[:2]) <= self.obstacle_radius + self.robot_radius:
@@ -100,7 +99,7 @@ class Dubins3DEnv(gym.Env):
             info['reach_goal'] = True
         elif self.state[0] < -4 or self.state[0] > 4 or self.state[1] < -4 or self.state[1] > 4:
             done = True
-            reward = -1000
+            reward = 0
             info['out_of_bounds'] = True
 
         return self.state, reward, done, info
@@ -129,13 +128,19 @@ class Dubins3DEnv(gym.Env):
 
         plt.axis("equal")
         plt.grid(True)
-        plt.pause(0.001)
+        plt.gcf().tight_layout(pad=0)
 
-        # if mode == 'rgb_array':
-        #     image_from_plot = np.frombuffer(plt.gcf().canvas.tostring_rgb(), dtype=np.uint8)
-        #     image_from_plot = image_from_plot.reshape(plt.gcf().canvas.get_width_height()[::-1] + (3,))
-        #     return image_from_plot
+        if mode == 'rgb_array':
+            plt.gcf().canvas.draw()
+            data = np.frombuffer(plt.gcf().canvas.tostring_rgb(), dtype=np.uint8)
+            w, h = plt.gcf().canvas.get_width_height()
+            im = data.reshape((h, w, -1))
+            return im
+        else:
+            plt.pause(0.001)
 
+    def close(self):
+        pass
 
 def main():
     import random
