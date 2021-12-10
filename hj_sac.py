@@ -128,7 +128,7 @@ if args.capture_video:
 
 
 dubins_car = DubinsCar(uMode='max', dMode='min')
-V = np.load('V_r1.15_grid100.npy')
+V = np.load('V_r1.15_grid101.npy')
 g = Grid(np.array([-4.0, -4.0, -np.pi]), np.array([4.0, 4.0, np.pi]), 3, np.array(V.shape), [2])
 
 def opt_ctrl(state):
@@ -266,14 +266,14 @@ def save_checkpoint(exp_name, global_step, pg, qf1, qf2, ckpt_path=None):
     }, ckpt_path)
 
 def load_checkpoint(ckpt_path, pg, qf1, qf2, evaluate=False):
-    print('Saving models to {}'.format(ckpt_path))
+    print('Loading checkpoint from {}'.format(ckpt_path))
     checkpoint = torch.load(ckpt_path)
     pg.load_state_dict(checkpoint['pg_state_dict'])
     qf1.load_state_dict(checkpoint['qf1_state_dict'])
     qf2.load_state_dict(checkpoint['qf2_state_dict'])
 
     if evaluate:
-        pg.eval(0)
+        pg.eval()
 
 
 rb = ReplayBuffer(args.buffer_size)
@@ -378,7 +378,7 @@ for global_step in range(1, args.total_timesteps+1):
             for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
                 target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-    if len(rb.buffer) > args.learning_starts and global_step % 100 == 0:
+    if len(rb.buffer) > args.learning_starts and global_step % 100 == 0 and not args.eval:
         writer.add_scalar("losses/soft_q_value_1_loss", qf1_loss.item(), global_step)
         writer.add_scalar("losses/soft_q_value_2_loss", qf2_loss.item(), global_step)
         writer.add_scalar("losses/qf_loss", qf_loss.item(), global_step)
