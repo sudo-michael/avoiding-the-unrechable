@@ -113,7 +113,7 @@ class PendulumEnv(gym.Env):
 
         # modified dynamics to mimic helperOC https://github.com/HJReachability/helperOC/blob/master/dynSys/%40InvertedPendulum/dynamics.m
         f1 = thdot
-        f2 = (-b * thdot + m * g * l * np.sin(th) / 2) / (m * l ** 2 * 1 / 3)
+        f2 = (-b * thdot + m * g * l * np.sin(th) / 2) / (m * l ** 2 / 3)
         g1 = 0
         g2 = -1 / (m * l ** 2 / 3)
 
@@ -129,6 +129,7 @@ class PendulumEnv(gym.Env):
 
         self.state = np.array([newth, newthdot])
 
+        # return self._get_obs(), -costs, not is_safe(newth), {"safe": is_safe(newth)}
         return self._get_obs(), -costs, False, {"safe": is_safe(newth)}
 
     def reset(
@@ -139,10 +140,12 @@ class PendulumEnv(gym.Env):
         options: Optional[dict] = None
     ):
         super().reset(seed=seed)
-        high = np.array([np.pi, 1])
+        # high = np.array([np.pi, 1])
+        high = np.array([0, 1])
         self.state = self.np_random.uniform(low=-high, high=high)
-        while not is_safe(self.state[0]):
-            self.state = self.np_random.uniform(low=-high, high=high)
+        # while not is_safe(self.state[0]):
+        #     self.state = self.np_random.uniform(low=-high, high=high)
+        self.state[0] = np.pi
 
         self.last_u = None
         if not return_info:
@@ -216,7 +219,7 @@ class PendulumEnv(gym.Env):
             self.surf,
             self.screen_dim // 2,
             self.screen_dim // 2,
-            100,
+            150,
             135,
             180,
             (255, 0, 0, 255),
