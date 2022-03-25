@@ -12,6 +12,8 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 
+from scipy.integrate import solve_ivp
+
 
 class PendulumEnv(gym.Env):
     """
@@ -79,14 +81,16 @@ class PendulumEnv(gym.Env):
 
     metadata = {"render.modes": ["human", "rgb_array"], "video.frames_per_second": 30}
 
-    def __init__(self, g=10.0):
+    def __init__(self, g=10.0, matlab_controller=None, done_if_unsafe=False):
         self.max_speed = 8
         self.max_torque = 2.0
-        self.dt = 0.05
+        self.dt = 0.1
         self.g = g
         self.m = 1.0
         self.l = 1.0
         self.b = 0.08
+        self.matlab_controller = matlab_controller
+        self.done_if_unsafe = done_if_unsafe
         self.screen = None
         self.isopen = True
 
@@ -99,53 +103,82 @@ class PendulumEnv(gym.Env):
         self.observation_space = spaces.Box(low=-high, high=high, dtype=np.float32)
 
     def step(self, u):
+        # g = self.g
+        # m = self.m
+        # l = self.l
+        # dt = self.dt
+        # b = self.b
+
+        # # modified dynamics to mimic helperOC https://github.com/HJReachability/helperOC/blob/master/dynSys/%40InvertedPendulum/dynamics.m
+        # f1 = thdot
+        # f2 = (-b * thdot + m * g * l * np.sin(th) / 2) / (m * l ** 2 / 3)
+        # g1 = 0
+        # g2 = -1 / (m * l ** 2 / 3)
+
+        # dx0 = f1 + g1 * u
+        # dx1 = f2 + g2 * u
+
         th, thdot = self.state  # th := theta
-
-        g = self.g
-        m = self.m
-        l = self.l
-        dt = self.dt
-        b = self.b
-
         u = np.clip(u, -self.max_torque, self.max_torque)[0]
         self.last_u = u  # for rendering
+        self.u = u
         costs = angle_normalize(th) ** 2 + 0.1 * thdot ** 2 + 0.001 * (u ** 2)
 
-        # modified dynamics to mimic helperOC https://github.com/HJReachability/helperOC/blob/master/dynSys/%40InvertedPendulum/dynamics.m
-        f1 = thdot
-        f2 = (-b * thdot + m * g * l * np.sin(th) / 2) / (m * l ** 2 / 3)
-        g1 = 0
-        g2 = -1 / (m * l ** 2 / 3)
+        def dynamics(t, state):
+            th, thdot = state
 
-        dx0 = f1 + g1 * u
-        dx1 = f2 + g2 * u
+            g = self.g
+            m = self.m
+            l = self.l
+            dt = self.dt
+            b = self.b
 
-        newth = th + dx0 * dt
-        newthdot = thdot + dx1 * dt
-        # newthdot = thdot + (3 * g / (2 * l) * np.sin(th) + 3.0 / (m * l ** 2) * u) * dt
+            u = self.u
+            self.last_u = u  # for rendering
+            # costs = angle_normalize(th) ** 2 + 0.1 * thdot ** 2 + 0.001 * (u ** 2)
+
+            # modified dynamics to mimic helperOC https://github.com/HJReachability/helperOC/blob/master/dynSys/%40InvertedPendulum/dynamics.m
+            f1 = thdot
+            f2 = (-b * thdot + m * g * l * np.sin(th) / 2) / (m * l ** 2 / 3)
+            g1 = 0
+            g2 = -1 / (m * l ** 2 / 3)
+
+            dx0 = f1 + g1 * u
+            dx1 = f2 + g2 * u
+
+            return [dx0, dx1]
+
+        sol = solve_ivp(dynamics, [0, self.dt], self.state)
+        newth, newthdot = sol.y[:, -1]
+        # dx0, dx1 = dynamics(0, self.state)
+        # newth = th + dx0 * self.dt
+        # newthdot = thdot + dx1 * self.dt
         newth = angle_normalize(newth)
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
-        # newth = th + newthdot * dt
 
         self.state = np.array([newth, newthdot])
 
         # return self._get_obs(), -costs, not is_safe(newth), {"safe": is_safe(newth)}
-        return self._get_obs(), -costs, False, {"safe": is_safe(newth)}
+        done = False
+        if self.done_if_unsafe and not is_safe(newth):
+            done = True
+
+        return self._get_obs(), -costs, done, {"safe": is_safe(newth)}
 
     def reset(
         self,
         *,
         seed: Optional[int] = None,
         return_info: bool = False,
-        options: Optional[dict] = None
+        options: Optional[dict] = None,
     ):
         super().reset(seed=seed)
-        # high = np.array([np.pi, 1])
-        high = np.array([0, 1])
-        self.state = self.np_random.uniform(low=-high, high=high)
-        # while not is_safe(self.state[0]):
-        #     self.state = self.np_random.uniform(low=-high, high=high)
-        self.state[0] = np.pi
+        high = np.array([np.pi, 1])
+        while True:
+            self.state = self.np_random.uniform(low=-high, high=high)
+            opt_ctrl, value = self.matlab_controller.opt_ctrl_value(self.state)
+            if value > 0.0:
+                break
 
         self.last_u = None
         if not return_info:
@@ -265,3 +298,11 @@ register(
     entry_point="safe_pendulum:PendulumEnv",
     max_episode_steps=200,
 )
+
+
+if __name__ in "__main__":
+    env = PendulumEnv()
+    obs = env.reset()
+    print(env.state)
+    env.step([-2])
+    print(env.state)
