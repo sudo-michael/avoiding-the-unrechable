@@ -1,0 +1,29 @@
+{
+    "os": "Linux-5.11.0-41-generic-x86_64-with-glibc2.17",
+    "python": "3.8.12",
+    "heartbeatAt": "2022-04-05T18:34:05.371713",
+    "startedAt": "2022-04-05T18:34:04.036812",
+    "docker": null,
+    "gpu": "NVIDIA GeForce RTX 3080",
+    "gpu_count": 1,
+    "cpu_count": 24,
+    "cuda": null,
+    "args": [
+        "--track",
+        "--capture-video",
+        "--use-hj",
+        "--reward-shape"
+    ],
+    "state": "running",
+    "program": "sac.py",
+    "codePath": "safe-pendulum-gym/sac.py",
+    "git": {
+        "remote": "git@github.com:sudo-michael/avoiding-the-unrechable.git",
+        "commit": "4bae10936009c22c5e189a52072b6c5d6153a1bc"
+    },
+    "email": "lu.michael@outlook.com",
+    "root": "/local-scratch/localhome/mla233/github/avoiding-the-unrechable",
+    "host": "cs-mars-04",
+    "username": "mla233",
+    "executable": "/localhome/mla233/miniconda3/envs/atu/bin/python"
+}

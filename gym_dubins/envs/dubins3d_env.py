@@ -120,7 +120,8 @@ class Dubins3DEnv(gym.Env):
             or self.state[1] > 4
         ):
             done = True
-            reward = -1000
+            reward = -500
+            # reward = 0
             info["out_of_bounds"] = True
 
         return self.state, reward, done, info

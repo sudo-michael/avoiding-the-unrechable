@@ -1,5 +1,6 @@
 # from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/sac_continuous_action.py
 import argparse
+import enum
 import os
 import copy
 import random
@@ -12,8 +13,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from stable_baselines3.common.buffers import ReplayBuffer
+from cost_buffer import CostReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
+
+from scipy.stats import norm
 
 from safe_pendulum import PendulumEnv
 from helper_oc_controller import HelperOCController
@@ -32,12 +35,14 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="cleanRL",
+    parser.add_argument("--wandb-project-name", type=str, default="atu",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--lagrange", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Use Sac Lagrange") # https://github.com/AlgTUDelft/WCSAC/blob/main/wc_sac/sac/saclag.py
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="Safe-Pendulum-v1",
@@ -70,6 +75,8 @@ def parse_args():
         help="noise clip parameter of the Target Policy Smoothing Regularization")
     parser.add_argument("--alpha", type=float, default=0.2,
             help="Entropy regularization coefficient.")
+    parser.add_argument("--beta", type=float, default=0.1,
+            help="Lagrangian Penalty Term")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
     parser.add_argument("--use-hj", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -231,6 +238,12 @@ if __name__ == "__main__":
     )
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
+    if args.lagrange:
+        qfc = SoftQNetwork(envs).to(device)
+        qfc_target = SoftQNetwork(envs).to(device)
+        qfc_target.load_state_dict(qfc.state_dict())
+        qc_optimizer = optim.Adam(qfc.parameters(), lr=args.q_lr)
+
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -torch.prod(
@@ -242,8 +255,18 @@ if __name__ == "__main__":
     else:
         alpha = args.alpha
 
+    if args.lagrange:
+        beta = args.beta
+        log_beta = torch.tensor(np.log(beta), requires_grad=True, device=device)
+        beta = log_beta.exp()
+        b_optimizer = optim.Adam(
+            [log_beta], lr=args.q_lr
+        )  # increasing beta means more penalty
+    else:
+        beta = 0.0
+
     envs.single_observation_space.dtype = np.float32
-    rb = ReplayBuffer(
+    rb = CostReplayBuffer(
         args.buffer_size,
         envs.single_observation_space,
         envs.single_action_space,
@@ -257,6 +280,7 @@ if __name__ == "__main__":
     unsafe_counter = 0
     hj_use_counter = 0
 
+    ep_cost = 0
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         used_hj = False
@@ -287,6 +311,13 @@ if __name__ == "__main__":
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, dones, infos = envs.step(actions)
+        costs = [not info["safe"] for info in infos]
+
+        # for i in infos:
+        #     if not i["safe"]:
+        #         breakpoint()
+
+        ep_cost += costs[0]
 
         if args.reward_shape:
             reward_shape_rewards = copy.deepcopy(rewards)
@@ -306,22 +337,25 @@ if __name__ == "__main__":
                 print(
                     f"global_step={global_step}, episodic_return={info['episode']['r']}"
                 )
+                print(f"global_step={global_step}, episodic_cost={ep_cost}")
                 writer.add_scalar(
                     "charts/episodic_return", info["episode"]["r"], global_step
                 )
+                writer.add_scalar("charts/episodic_cost", ep_cost, global_step)
+                ep_cost = 0
                 break
 
         if args.done_if_unsafe:
             for idx, info in enumerate(infos):
                 if not info["safe"]:
-                    rewards[idx] = -16 / (1 - args.gamma)
+                    rewards[idx][0] = -16 / (1 - args.gamma)
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
         real_next_obs = next_obs.copy()
         for idx, d in enumerate(dones):
             if d:
                 real_next_obs[idx] = infos[idx]["terminal_observation"]
-        rb.add(obs, real_next_obs, actions, rewards, dones, infos)
+        rb.add(obs, real_next_obs, actions, rewards, costs, dones, infos)
 
         if args.reward_shape:
             rb.add(
@@ -329,6 +363,7 @@ if __name__ == "__main__":
                 real_next_obs,
                 reward_shape_actions,
                 reward_shape_rewards,
+                costs,
                 dones,
                 infos,
             )
@@ -360,11 +395,27 @@ if __name__ == "__main__":
                     1 - data.dones.flatten()
                 ) * args.gamma * (min_qf_next_target).view(-1)
 
+                if args.lagrange:
+                    qfc_next_target = qfc_target(
+                        data.next_observations, next_state_actions
+                    )
+                    next_qc_value = data.rewards.flatten() + (
+                        1 - data.dones.flatten()
+                    ) * args.gamma * (qfc_next_target).view(-1)
+
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
             qf_loss = (qf1_loss + qf2_loss) / 2
+
+            if args.lagrange:
+                qfc_a_values = qfc(data.observations, data.actions).view(-1)
+                qfc_loss = F.mse_loss(qfc_a_values, next_qc_value)
+                qc_optimizer.zero_grad()
+                qfc_loss.backward()
+                nn.utils.clip_grad_norm_(qfc.parameters(), args.max_grad_norm)
+                qc_optimizer.step()
 
             q_optimizer.zero_grad()
             qf_loss.backward()
@@ -381,7 +432,14 @@ if __name__ == "__main__":
                     qf1_pi = qf1(data.observations, pi)
                     qf2_pi = qf2(data.observations, pi)
                     min_qf_pi = torch.min(qf1_pi, qf2_pi).view(-1)
-                    actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
+
+                    if args.lagrange:
+                        qfc_pi = qfc(data.observations, pi)
+                        actor_loss = (
+                            (alpha * log_pi) + (beta * qfc_pi) - min_qf_pi
+                        ).mean()
+                    else:
+                        actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
 
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
@@ -400,6 +458,15 @@ if __name__ == "__main__":
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
 
+                        if args.lagrange:
+                            with torch.no_grad():
+                                qfc_pi = qfc(data.observations, pi)
+                            beta_loss = (log_beta.exp() * (0 + qfc_pi)).mean()
+                            b_optimizer.zero_grad()
+                            beta_loss.backward()
+                            b_optimizer.step()
+                            beta = log_beta.exp()
+
             # update the target networks
             if global_step % args.target_network_frequency == 0:
                 for param, target_param in zip(
@@ -415,12 +482,23 @@ if __name__ == "__main__":
                         args.tau * param.data + (1 - args.tau) * target_param.data
                     )
 
+                if args.lagrange:
+                    for param, target_param in zip(
+                        qfc.parameters(), qfc_target.parameters()
+                    ):
+                        target_param.data.copy_(
+                            args.tau * param.data + (1 - args.tau) * target_param.data
+                        )
+
             if global_step % 100 == 0:
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item(), global_step)
+                if args.lagrange:
+                    writer.add_scalar("losses/qfc_loss", qfc_loss.item(), global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 writer.add_scalar("losses/alpha", alpha, global_step)
+                writer.add_scalar("losses/beta", beta, global_step)
                 writer.add_scalar(
                     "losses/qf1_values", qf1_a_values.mean().item(), global_step
                 )

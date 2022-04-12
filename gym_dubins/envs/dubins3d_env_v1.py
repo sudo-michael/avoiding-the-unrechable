@@ -4,7 +4,12 @@ import gym
 from gym.spaces import Discrete, Box
 from gym.utils import seeding
 import numpy as np
+import matplotlib
+
+# matplotlib.use("tkagg")
+
 import matplotlib.pyplot as plt
+
 
 class Dubins3DEnv1(gym.Env):
     """
@@ -27,7 +32,8 @@ class Dubins3DEnv1(gym.Env):
     Reward:
          Episode length is greater than 150
     """
-    metadata = {'render.modes': ['human']}
+
+    metadata = {"render.modes": ["human", "rgb_array"]}
 
     def __init__(self):
         self.inital_position = np.array([-3.0, -3.0, 0], dtype=np.float32)
@@ -39,11 +45,12 @@ class Dubins3DEnv1(gym.Env):
         self.obstacle_position = np.array([0, 0])
         self.obstacle_radius = 0.75
 
-        self.boundary = np.array([
-            [-4, 4, -4, -4], 
-            [-4, 4,  4, 4], 
-            [-4, -4, -4, 4], 
-            [4, 4, -4, 4], 
+        self.boundary = np.array(
+            [
+                [-4, 4, -4, -4],
+                [-4, 4, 4, 4],
+                [-4, -4, -4, 4],
+                [4, 4, -4, 4],
             ]
         )
 
@@ -52,11 +59,14 @@ class Dubins3DEnv1(gym.Env):
         self.velocity = 1
         self.dt = 0.1
 
-        self.action_space = Box(low=-self.max_w, high=self.max_w, dtype=np.float32,
-                                     shape=(1,))
-        self.observation_space = Box(low=-np.inf, high=np.inf, dtype=np.float32,
-                                     shape=(3,))
+        self.action_space = Box(
+            low=-self.max_w, high=self.max_w, dtype=np.float32, shape=(1,)
+        )
+        self.observation_space = Box(
+            low=-np.inf, high=np.inf, dtype=np.float32, shape=(3,)
+        )
 
+        self.hj_used_states = []
         self.state = None
         self.seed()
 
@@ -65,6 +75,7 @@ class Dubins3DEnv1(gym.Env):
         return [seed]
 
     def reset(self):
+        self.hj_used_states.clear()
         self.state = self.inital_position.copy()
         return self.state
 
@@ -84,61 +95,91 @@ class Dubins3DEnv1(gym.Env):
 
         done = False
         reward = -np.linalg.norm(self.state[:2] - self.goal_position)
-        info = {'reach_goal': False, 'collide_with_obs': False, 'out_of_bounds': False}
+        info = {"reach_goal": False, "collide_with_obs": False, "out_of_bounds": False}
 
         if np.linalg.norm(self.state[:2]) <= self.obstacle_radius + self.robot_radius:
             # collide with obstacle
             done = True
-            reward = -1000
-            info['collide_with_obs'] = True
-        elif np.linalg.norm(self.state[:2] - self.goal_position) <= self.goal_radius + self.robot_radius:
+            reward = 0
+            info["collide_with_obs"] = True
+        elif (
+            np.linalg.norm(self.state[:2] - self.goal_position)
+            <= self.goal_radius + self.robot_radius
+        ):
             # reach goal
             done = True
             reward = 1000
-            info['reach_goal'] = True
-        elif self.state[0] < -4 or self.state[0] > 4 or self.state[1] < -4 or self.state[1] > 4:
+            info["reach_goal"] = True
+        elif (
+            self.state[0] < -4
+            or self.state[0] > 4
+            or self.state[1] < -4
+            or self.state[1] > 4
+        ):
             done = True
-            info['out_of_bounds'] = True
+            reward = -1000
+            info["out_of_bounds"] = True
 
         return self.state, reward, done, info
-        
-    def render(self, mode='human'):
+
+    def render(self, mode="human"):
         plt.cla()
         # for stopping simulation with the esc key.
         plt.gcf().canvas.mpl_connect(
-            'key_release_event',
-            lambda event: [exit(0) if event.key in ['escape', 'q'] else None])
+            "key_release_event",
+            lambda event: [exit(0) if event.key in ["escape", "q"] else None],
+        )
         plt.plot(self.inital_position[0], self.inital_position[1], "xr")
         plt.plot(self.goal_position[0], self.goal_position[1], "xb")
-        obs = plt.Circle(self.obstacle_position, self.obstacle_radius, color='black')
+        obs = plt.Circle(self.obstacle_position, self.obstacle_radius, color="black")
         plt.gcf().gca().add_artist(obs)
-    
-        goal = plt.Circle(self.goal_position, self.goal_radius, color='green')
+
+        goal = plt.Circle(self.goal_position, self.goal_radius, color="green")
         plt.gcf().gca().add_artist(goal)
 
-        robot = plt.Circle(self.state[:2], self.robot_radius, color='blue')
+        robot = plt.Circle(self.state[:2], self.robot_radius, color="blue")
         plt.gcf().gca().add_artist(robot)
-        dir = self.state[:2] + np.array([np.cos(self.state[2]), np.sin(self.state[2])]) * self.robot_radius
+        dir = (
+            self.state[:2]
+            + np.array([np.cos(self.state[2]), np.sin(self.state[2])])
+            * self.robot_radius
+        )
         plt.plot([self.state[0], dir[0]], [self.state[1], dir[1]], "-k")
 
         for i in range(len(self.boundary)):
-            plt.plot([self.boundary[i][0], self.boundary[i][1]], [self.boundary[i][2], self.boundary[i][3]], "-k")
+            plt.plot(
+                [self.boundary[i][0], self.boundary[i][1]],
+                [self.boundary[i][2], self.boundary[i][3]],
+                "-k",
+            )
+
+        for state in self.hj_used_states:
+            plt.plot(state[0], state[1], "xr")
 
         plt.axis("equal")
         plt.grid(True)
-        plt.pause(0.001)
+        plt.gcf().tight_layout(pad=0)
 
-        # if mode == 'rgb_array':
-        #     image_from_plot = np.frombuffer(plt.gcf().canvas.tostring_rgb(), dtype=np.uint8)
-        #     image_from_plot = image_from_plot.reshape(plt.gcf().canvas.get_width_height()[::-1] + (3,))
-        #     return image_from_plot
+        if mode == "rgb_array":
+            plt.gcf().canvas.draw()
+            data = np.frombuffer(plt.gcf().canvas.tostring_rgb(), dtype=np.uint8)
+            w, h = plt.gcf().canvas.get_width_height()
+            im = data.reshape((h, w, -1))
+            return im
+        else:
+            plt.pause(0.001)
+
+    def close(self):
+        pass
 
 
 def main():
     import random
+
     random.seed(0)
 
     import time
+
     env = Dubins3DEnv()
     state = env.reset()
     env.render()

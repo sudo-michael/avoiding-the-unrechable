@@ -1,0 +1,147 @@
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_setup.py:_flush():75] Loading settings from /localhome/mla233/.config/wandb/settings
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_setup.py:_flush():75] Loading settings from /local-scratch/localhome/mla233/github/avoiding-the-unrechable/safe-pendulum-gym/wandb/settings
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_setup.py:_flush():75] Loading settings from environment variables: {}
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_setup.py:_flush():75] Inferring run settings from compute environment: {'program_relpath': 'safe-pendulum-gym/sac.py', 'program': 'sac.py'}
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_init.py:_log_setup():405] Logging user logs to /local-scratch/localhome/mla233/github/avoiding-the-unrechable/safe-pendulum-gym/wandb/run-20220405_111628-btoc8weu/logs/debug.log
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_init.py:_log_setup():406] Logging internal logs to /local-scratch/localhome/mla233/github/avoiding-the-unrechable/safe-pendulum-gym/wandb/run-20220405_111628-btoc8weu/logs/debug-internal.log
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_init.py:init():439] calling init triggers
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_init.py:init():442] wandb.init called with sweep_config: {}
+config: {'exp_name': 'sac', 'seed': 1, 'torch_deterministic': True, 'cuda': True, 'track': True, 'wandb_project_name': 'atu', 'wandb_entity': None, 'capture_video': True, 'lagrange': False, 'env_id': 'Safe-Pendulum-v1', 'total_timesteps': 15000, 'buffer_size': 1000000, 'gamma': 0.99, 'tau': 0.005, 'max_grad_norm': 0.5, 'batch_size': 256, 'exploration_noise': 0.1, 'learning_starts': 5000, 'policy_lr': 0.0003, 'q_lr': 0.001, 'policy_frequency': 2, 'target_network_frequency': 1, 'noise_clip': 0.5, 'alpha': 0.2, 'beta': 0.1, 'autotune': True, 'use_hj': True, 'hj_stop_steps': 2147483647, 'reward_shape': False, 'done_if_unsafe': False}
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [wandb_init.py:init():492] starting backend
+2022-04-05 11:16:28,163 INFO    MainThread:2120147 [backend.py:_multiprocessing_setup():99] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2022-04-05 11:16:28,179 INFO    MainThread:2120147 [backend.py:ensure_launched():219] starting backend process...
+2022-04-05 11:16:28,194 INFO    MainThread:2120147 [backend.py:ensure_launched():224] started backend process with pid: 2120675
+2022-04-05 11:16:28,205 INFO    MainThread:2120147 [wandb_init.py:init():501] backend started and connected
+2022-04-05 11:16:28,213 INFO    MainThread:2120147 [wandb_init.py:init():565] updated telemetry
+2022-04-05 11:16:28,256 INFO    MainThread:2120147 [wandb_init.py:init():596] communicating run to backend with 30 second timeout
+2022-04-05 11:16:29,155 INFO    MainThread:2120147 [wandb_run.py:_on_init():1759] communicating current version
+2022-04-05 11:16:29,219 INFO    MainThread:2120147 [wandb_run.py:_on_init():1763] got version response upgrade_message: "wandb version 0.12.12 is available!  To upgrade, please run:\n $ pip install wandb --upgrade"
+
+2022-04-05 11:16:29,219 INFO    MainThread:2120147 [wandb_init.py:init():625] starting run threads in backend
+2022-04-05 11:16:31,747 INFO    MainThread:2120147 [wandb_run.py:_console_start():1733] atexit reg
+2022-04-05 11:16:31,749 INFO    MainThread:2120147 [wandb_run.py:_redirect():1606] redirect: SettingsConsole.REDIRECT
+2022-04-05 11:16:31,749 INFO    MainThread:2120147 [wandb_run.py:_redirect():1611] Redirecting console.
+2022-04-05 11:16:31,750 INFO    MainThread:2120147 [wandb_run.py:_redirect():1667] Redirects installed.
+2022-04-05 11:16:31,750 INFO    MainThread:2120147 [wandb_init.py:init():664] run started, returning control to user process
+2022-04-05 11:16:31,751 INFO    MainThread:2120147 [wandb_run.py:_tensorboard_callback():1095] tensorboard callback: runs/Safe-Pendulum-v1__sac__1__1649182587, None
+2022-04-05 12:02:38,588 INFO    MainThread:2120147 [wandb_run.py:_atexit_cleanup():1702] got exitcode: 0
+2022-04-05 12:02:38,590 INFO    MainThread:2120147 [wandb_run.py:_restore():1674] restore
+2022-04-05 12:02:41,190 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 1
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1816276
+  total_bytes: 1816276
+}
+
+2022-04-05 12:02:46,291 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: None
+2022-04-05 12:02:47,798 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 1
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1816276
+  total_bytes: 1816276
+}
+
+2022-04-05 12:02:48,244 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1816276
+  total_bytes: 1833771
+}
+
+2022-04-05 12:02:48,354 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 444062
+  total_bytes: 1938555
+}
+
+2022-04-05 12:02:48,456 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1125109
+  total_bytes: 1938555
+}
+
+2022-04-05 12:02:48,558 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1938555
+  total_bytes: 1938555
+}
+
+2022-04-05 12:02:48,661 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1938555
+  total_bytes: 1938555
+}
+
+2022-04-05 12:02:48,762 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1938555
+  total_bytes: 1938555
+}
+
+2022-04-05 12:02:48,864 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1938555
+  total_bytes: 1938555
+}
+
+2022-04-05 12:02:49,196 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1938555
+  total_bytes: 1938555
+}
+
+2022-04-05 12:02:49,472 INFO    MainThread:2120147 [wandb_run.py:_on_finish():1831] got exit ret: done: true
+exit_result {
+}
+file_counts {
+  wandb_count: 6
+  media_count: 5
+  other_count: 1
+}
+pusher_stats {
+  uploaded_bytes: 1938555
+  total_bytes: 1938555
+}
+local_info {
+}
+
+2022-04-05 12:02:50,782 INFO    MainThread:2120147 [wandb_run.py:_footer_history_summary_info():2865] rendering history
+2022-04-05 12:02:50,783 INFO    MainThread:2120147 [wandb_run.py:_footer_history_summary_info():2894] rendering summary
+2022-04-05 12:02:50,786 INFO    MainThread:2120147 [wandb_run.py:_footer_sync_info():2822] logging synced files

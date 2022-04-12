@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
 # TRY NOT TO MODIFY: setup the environment
 experiment_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-writer = SummaryWriter(f"runs/{experiment_name}")
+writer = SummaryWriter(f"evals/{experiment_name}")
 writer.add_text('hyperparameters', "|param|value|\n|-|-|\n%s" % (
         '\n'.join([f"|{key}|{value}|" for key, value in vars(args).items()])))
 if args.track:
@@ -305,12 +305,10 @@ if args.autotune:
 else:
     alpha = args.alpha
 
-# if args.checkpoint:
-    # load_checkpoint(args.checkpoint, pg, qf1, qf2, args.eval)
+if args.checkpoint:
+    load_checkpoint(args.checkpoint, pg, qf1, qf2, args.eval)
 
-checkpoints = torch.load('checkpoints/dubins3d-v0__hj_sac__2__1639003426/sac_checkpoint_20000')
-pg.load_state_dict(checkpoints['pg_state_dict'])
-pg.eval()
+# checkpoints = torch.load('checkpoints/dubins3d-v0__hj_sac__2__1639168306/sac_checkpoint_15000') # use hj -false
 
 # TRY NOT TO MODIFY: start the game
 global_episode = 0
@@ -327,6 +325,7 @@ for global_step in range(1, args.total_timesteps+1):
         else:
             print(f'\t{global_step}: using safe action')
             action, _, _ = pg.get_action(np.array([obs]), device)
+            env.hj_used_states.append(obs[:2].copy())
             action = action.tolist()[0]
 
             spa_derivatives = spa_deriv(g.get_index(obs), V, g, periodic_dims=[2])
@@ -346,16 +345,16 @@ for global_step in range(1, args.total_timesteps+1):
     obs = np.array(next_obs)
 
     if done:
-        import matplotlib.pyplot as plt
-        plt.clf()
-        plt.plot(np.arange(len(V_over_time)), V_over_time)
-        plt.show()
-        V_over_time.clear()
+        # import matplotlib.pyplot as plt
+        # plt.clf()
+        # plt.plot(np.arange(len(V_over_time)), V_over_time)
+        # plt.show()
+        # V_over_time.clear()
         global_episode += 1 # Outside the loop already means the epsiode is done
         writer.add_scalar("charts/episodic_return", episode_reward, global_step)
         writer.add_scalar("charts/episode_length", episode_length, global_step)
         # Terminal verbosity
-        if global_episode % 10 == 0:
+        if global_episode % 1 == 0:
             print(f"global_step={global_step}, episode_reward={episode_reward}")
 
         # Reseting what need to be

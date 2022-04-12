@@ -20,6 +20,7 @@ class SafeController:
         spa_derivatives = spa_deriv(
             self.grid.get_index(state), self.V, self.grid, periodic_dims=[2]
         )
+        # print(f"{spa_derivatives=}")
         opt_w = self.dubins_car.wMax
         if spa_derivatives[2] > 0:
             if self.dubins_car.uMode == "min":

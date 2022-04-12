@@ -1,0 +1,437 @@
+
+Failed to establish dbus connection
+global_step=199, episodic_return=-1783.799560546875
+global_step=199, episodic_cost=0
+global_step=399, episodic_return=-1633.66943359375
+global_step=399, episodic_cost=0
+global_step=599, episodic_return=-1489.798828125
+global_step=599, episodic_cost=3
+global_step=799, episodic_return=-1573.595703125
+global_step=799, episodic_cost=0
+global_step=999, episodic_return=-1545.6153564453125
+global_step=999, episodic_cost=0
+global_step=1199, episodic_return=-1567.5865478515625
+global_step=1199, episodic_cost=1
+global_step=1399, episodic_return=-1612.8719482421875
+global_step=1399, episodic_cost=0
+global_step=1599, episodic_return=-1727.0263671875
+global_step=1599, episodic_cost=0
+global_step=1799, episodic_return=-1749.4632568359375
+global_step=1799, episodic_cost=0
+global_step=1999, episodic_return=-1342.09521484375
+global_step=1999, episodic_cost=7
+global_step=2199, episodic_return=-1680.410888671875
+global_step=2199, episodic_cost=0
+global_step=2399, episodic_return=-1476.8111572265625
+global_step=2399, episodic_cost=7
+global_step=2599, episodic_return=-1498.45703125
+global_step=2599, episodic_cost=2
+global_step=2799, episodic_return=-1583.6783447265625
+global_step=2799, episodic_cost=0
+global_step=2999, episodic_return=-1526.350341796875
+global_step=2999, episodic_cost=0
+global_step=3199, episodic_return=-1549.3187255859375
+global_step=3199, episodic_cost=0
+global_step=3399, episodic_return=-1502.3277587890625
+global_step=3399, episodic_cost=6
+global_step=3599, episodic_return=-1324.3731689453125
+global_step=3599, episodic_cost=9
+global_step=3799, episodic_return=-1594.95947265625
+global_step=3799, episodic_cost=0
+global_step=3999, episodic_return=-1276.828369140625
+global_step=3999, episodic_cost=13
+global_step=4199, episodic_return=-1656.2222900390625
+global_step=4199, episodic_cost=0
+global_step=4399, episodic_return=-1551.653564453125
+global_step=4399, episodic_cost=0
+global_step=4599, episodic_return=-1611.3045654296875
+global_step=4599, episodic_cost=0
+global_step=4799, episodic_return=-1368.7342529296875
+global_step=4799, episodic_cost=12
+global_step=4999, episodic_return=-1393.270751953125
+global_step=4999, episodic_cost=2
+replacing: [1.1695089] with [-2.]
+replacing: [1.2758275] with [-2.]
+replacing: [-0.39980564] with [-2.]
+replacing: [0.3701676] with [-2.]
+replacing: [0.4711316] with [-2.]
+global_step=5199, episodic_return=-1614.47265625
+global_step=5199, episodic_cost=0
+global_step=5399, episodic_return=-1686.1259765625
+global_step=5399, episodic_cost=0
+replacing: [1.049261] with [-2.]
+global_step=5599, episodic_return=-1655.35986328125
+global_step=5599, episodic_cost=0
+replacing: [-1.9778733] with [-2.]
+replacing: [-1.1943378] with [-2.]
+replacing: [-0.49950916] with [-2.]
+global_step=5799, episodic_return=-1334.294189453125
+global_step=5799, episodic_cost=0
+replacing: [1.7896054] with [-2.]
+global_step=5999, episodic_return=-1304.1363525390625
+global_step=5999, episodic_cost=0
+replacing: [1.2802716] with [-2.]
+replacing: [1.338481] with [-2.]
+replacing: [1.7198222] with [-2.]
+replacing: [0.44977826] with [-2.]
+replacing: [1.2350905] with [-2.]
+replacing: [1.3861324] with [-2.]
+replacing: [1.0574968] with [-2.]
+replacing: [1.73033] with [-2.]
+replacing: [1.4535537] with [-2.]
+replacing: [1.5616326] with [-2.]
+replacing: [1.4121401] with [-2.]
+global_step=6199, episodic_return=-1219.2208251953125
+global_step=6199, episodic_cost=0
+replacing: [1.5849303] with [-2.]
+replacing: [1.9503156] with [-2.]
+replacing: [1.6119986] with [-2.]
+replacing: [1.5701962] with [-2.]
+replacing: [1.4944289] with [-2.]
+replacing: [1.582053] with [-2.]
+replacing: [0.9388729] with [-2.]
+replacing: [0.99091536] with [-2.]
+replacing: [1.9468259] with [-2.]
+replacing: [1.6194813] with [-2.]
+replacing: [0.92573357] with [-2.]
+replacing: [0.31037855] with [-2.]
+global_step=6399, episodic_return=-1191.6412353515625
+global_step=6399, episodic_cost=0
+replacing: [1.1303203] with [-2.]
+replacing: [1.7646261] with [-2.]
+replacing: [1.0827127] with [-2.]
+replacing: [1.6554883] with [-2.]
+replacing: [1.3960865] with [-2.]
+replacing: [1.8661226] with [-2.]
+replacing: [1.1079563] with [-2.]
+replacing: [0.10963786] with [-2.]
+replacing: [1.2814021] with [-2.]
+replacing: [0.2895311] with [-2.]
+replacing: [1.8420146] with [-2.]
+replacing: [1.6268479] with [-2.]
+replacing: [1.7519419] with [-2.]
+replacing: [1.0337712] with [-2.]
+replacing: [1.1004725] with [-2.]
+replacing: [0.30118036] with [-2.]
+replacing: [0.5407479] with [-2.]
+replacing: [1.2021765] with [-2.]
+replacing: [1.7236898] with [-2.]
+global_step=6599, episodic_return=-1121.3101806640625
+global_step=6599, episodic_cost=0
+replacing: [1.6005938] with [-2.]
+replacing: [-0.22810505] with [-2.]
+replacing: [1.6973585] with [-2.]
+replacing: [-1.457006] with [-2.]
+replacing: [0.8372155] with [-2.]
+replacing: [1.3949155] with [-2.]
+replacing: [0.7171672] with [-2.]
+replacing: [1.6478038] with [-2.]
+replacing: [1.5278611] with [-2.]
+replacing: [0.4969048] with [-2.]
+replacing: [1.6068785] with [-2.]
+replacing: [0.62889415] with [-2.]
+replacing: [1.935021] with [-2.]
+replacing: [1.6677814] with [-2.]
+replacing: [1.4058849] with [-2.]
+replacing: [1.7260225] with [-2.]
+replacing: [1.6460824] with [-2.]
+replacing: [1.8662974] with [-2.]
+replacing: [1.0233709] with [-2.]
+replacing: [1.5630951] with [-2.]
+global_step=6799, episodic_return=-1010.6434326171875
+global_step=6799, episodic_cost=0
+replacing: [1.8221244] with [-2.]
+replacing: [1.4377995] with [-2.]
+replacing: [0.14146638] with [-2.]
+replacing: [0.9201016] with [-2.]
+replacing: [1.4482672] with [-2.]
+replacing: [1.7698069] with [-2.]
+replacing: [1.082601] with [-2.]
+replacing: [1.2219925] with [-2.]
+replacing: [0.14613467] with [-2.]
+replacing: [1.9335834] with [-2.]
+replacing: [1.5736425] with [-2.]
+replacing: [0.7014306] with [-2.]
+replacing: [1.4998676] with [-2.]
+replacing: [0.5379598] with [-2.]
+replacing: [-1.278199] with [2.]
+replacing: [-0.5952517] with [2.]
+replacing: [0.2634597] with [2.]
+replacing: [-0.74689186] with [2.]
+replacing: [0.9079326] with [2.]
+replacing: [-1.1990697] with [2.]
+replacing: [-0.07828198] with [2.]
+replacing: [-1.367623] with [2.]
+replacing: [-0.46436417] with [2.]
+replacing: [-0.13796301] with [2.]
+replacing: [-0.3537301] with [2.]
+replacing: [1.0084699] with [2.]
+replacing: [-0.03753198] with [2.]
+replacing: [-0.08321785] with [2.]
+replacing: [-0.6338204] with [2.]
+replacing: [-1.243999] with [2.]
+replacing: [-1.1204898] with [2.]
+replacing: [-0.15587974] with [2.]
+global_step=6999, episodic_return=-686.82373046875
+global_step=6999, episodic_cost=0
+replacing: [1.07545] with [2.]
+replacing: [1.4232967] with [-2.]
+replacing: [1.0494841] with [-2.]
+replacing: [-0.09633145] with [-2.]
+replacing: [1.2935798] with [-2.]
+replacing: [-0.27709112] with [-2.]
+replacing: [0.3586551] with [2.]
+replacing: [0.9580006] with [2.]
+replacing: [0.75521106] with [2.]
+replacing: [1.1647289] with [2.]
+global_step=7199, episodic_return=-249.27330017089844
+global_step=7199, episodic_cost=0
+replacing: [-1.4723041] with [-2.]
+replacing: [1.2476449] with [-2.]
+replacing: [-0.9047396] with [2.]
+replacing: [-0.54670936] with [2.]
+replacing: [1.0262547] with [2.]
+replacing: [0.67891425] with [2.]
+replacing: [0.01644592] with [2.]
+global_step=7399, episodic_return=-185.2805633544922
+global_step=7399, episodic_cost=0
+replacing: [0.8559567] with [-2.]
+replacing: [0.7830565] with [-2.]
+replacing: [-1.9398572] with [2.]
+global_step=7599, episodic_return=-249.11878967285156
+global_step=7599, episodic_cost=0
+global_step=7799, episodic_return=-2.6752102375030518
+global_step=7799, episodic_cost=0
+replacing: [1.5038389] with [-2.]
+replacing: [0.4675258] with [-2.]
+replacing: [-1.6171048] with [2.]
+replacing: [0.7475487] with [2.]
+global_step=7999, episodic_return=-262.4258117675781
+global_step=7999, episodic_cost=0
+replacing: [-0.43998608] with [-2.]
+replacing: [-1.8963164] with [2.]
+replacing: [-1.5313853] with [2.]
+replacing: [1.4048258] with [2.]
+global_step=8199, episodic_return=-63.5459098815918
+global_step=8199, episodic_cost=0
+replacing: [1.9531484] with [-2.]
+replacing: [1.9395618] with [-2.]
+replacing: [-1.7851727] with [2.]
+replacing: [1.1853274] with [2.]
+global_step=8399, episodic_return=-203.47109985351562
+global_step=8399, episodic_cost=0
+replacing: [1.9710821] with [-2.]
+replacing: [1.4475856] with [-2.]
+replacing: [1.3177992] with [-2.]
+replacing: [-1.9567244] with [2.]
+replacing: [-0.55601907] with [2.]
+global_step=8599, episodic_return=-189.75054931640625
+global_step=8599, episodic_cost=0
+replacing: [1.6671731] with [-2.]
+replacing: [1.9257218] with [-2.]
+replacing: [1.4618529] with [-2.]
+replacing: [0.02311395] with [-2.]
+replacing: [-1.8827815] with [2.]
+replacing: [0.77570695] with [2.]
+global_step=8799, episodic_return=-122.18650817871094
+global_step=8799, episodic_cost=0
+replacing: [1.878646] with [-2.]
+replacing: [1.9260981] with [-2.]
+replacing: [-1.961621] with [2.]
+replacing: [-0.17639852] with [2.]
+global_step=8999, episodic_return=-185.4075164794922
+global_step=8999, episodic_cost=0
+replacing: [1.965084] with [-2.]
+replacing: [1.9788871] with [-2.]
+replacing: [-1.8922647] with [2.]
+replacing: [1.8051387] with [2.]
+global_step=9199, episodic_return=-122.59713745117188
+global_step=9199, episodic_cost=0
+replacing: [1.9498454] with [-2.]
+replacing: [1.9024972] with [-2.]
+replacing: [-0.71747977] with [-2.]
+replacing: [1.8126068] with [2.]
+replacing: [1.8989532] with [2.]
+global_step=9399, episodic_return=-189.20985412597656
+global_step=9399, episodic_cost=0
+replacing: [0.9140905] with [-2.]
+replacing: [-0.40696248] with [2.]
+global_step=9599, episodic_return=-119.1566162109375
+global_step=9599, episodic_cost=0
+global_step=9799, episodic_return=-62.396549224853516
+global_step=9799, episodic_cost=0
+replacing: [1.9880592] with [-2.]
+replacing: [1.9557927] with [-2.]
+replacing: [1.9237458] with [-2.]
+replacing: [1.0286304] with [-2.]
+replacing: [1.8081288] with [2.]
+global_step=9999, episodic_return=-118.1114273071289
+global_step=9999, episodic_cost=0
+replacing: [1.9777204] with [-2.]
+replacing: [1.9883184] with [-2.]
+replacing: [1.8005035] with [-2.]
+replacing: [1.9240144] with [-2.]
+replacing: [1.1411765] with [-2.]
+replacing: [1.3954344] with [-2.]
+replacing: [1.6572465] with [2.]
+replacing: [1.9642072] with [2.]
+replacing: [1.926273] with [2.]
+global_step=10199, episodic_return=-180.91751098632812
+global_step=10199, episodic_cost=0
+replacing: [1.7104553] with [-2.]
+replacing: [0.6489077] with [-2.]
+replacing: [-1.5279157] with [2.]
+replacing: [0.8656715] with [2.]
+global_step=10399, episodic_return=-231.9619140625
+global_step=10399, episodic_cost=0
+replacing: [1.9590911] with [-2.]
+replacing: [1.9984976] with [-2.]
+replacing: [1.9448922] with [-2.]
+replacing: [1.4602046] with [-2.]
+replacing: [-0.9243658] with [2.]
+global_step=10599, episodic_return=-186.8965301513672
+global_step=10599, episodic_cost=0
+global_step=10799, episodic_return=-3.2379493713378906
+global_step=10799, episodic_cost=0
+replacing: [1.9842944] with [-2.]
+replacing: [1.8957088] with [-2.]
+replacing: [1.5070099] with [-2.]
+replacing: [1.8742539] with [-2.]
+replacing: [0.95833886] with [-2.]
+replacing: [-1.7238168] with [2.]
+replacing: [1.7582877] with [2.]
+global_step=10999, episodic_return=-253.3510284423828
+global_step=10999, episodic_cost=0
+replacing: [1.8483187] with [2.]
+global_step=11199, episodic_return=-2.9864137172698975
+global_step=11199, episodic_cost=0
+replacing: [1.4893587] with [-2.]
+replacing: [1.6747411] with [-2.]
+replacing: [1.9808652] with [-2.]
+replacing: [1.8627869] with [-2.]
+replacing: [-0.9937065] with [2.]
+global_step=11399, episodic_return=-241.0980987548828
+global_step=11399, episodic_cost=0
+replacing: [0.6636259] with [2.]
+global_step=11599, episodic_return=-127.46574401855469
+global_step=11599, episodic_cost=0
+replacing: [1.054037] with [-2.]
+replacing: [1.2839658] with [-2.]
+replacing: [1.8620349] with [-2.]
+replacing: [-0.9239569] with [2.]
+replacing: [1.6389167] with [2.]
+global_step=11799, episodic_return=-122.3841552734375
+global_step=11799, episodic_cost=0
+replacing: [1.5132968] with [-2.]
+replacing: [1.4799743] with [-2.]
+replacing: [-1.2687292] with [2.]
+global_step=11999, episodic_return=-185.76919555664062
+global_step=11999, episodic_cost=0
+replacing: [1.7558185] with [-2.]
+replacing: [1.3924375] with [-2.]
+replacing: [1.8890741] with [-2.]
+replacing: [0.8312323] with [-2.]
+replacing: [-1.980619] with [2.]
+replacing: [1.1887419] with [2.]
+replacing: [1.9835209] with [2.]
+global_step=12199, episodic_return=-184.96031188964844
+global_step=12199, episodic_cost=0
+replacing: [0.36032778] with [-2.]
+replacing: [-0.43012345] with [-2.]
+replacing: [0.36330205] with [-2.]
+replacing: [1.752676] with [-2.]
+replacing: [1.845318] with [-2.]
+replacing: [-1.9703755] with [2.]
+replacing: [1.8767285] with [2.]
+global_step=12399, episodic_return=-121.24974822998047
+global_step=12399, episodic_cost=0
+replacing: [0.27548224] with [2.]
+replacing: [1.986739] with [2.]
+replacing: [1.982439] with [2.]
+replacing: [1.7525862] with [2.]
+replacing: [1.989727] with [2.]
+replacing: [1.8891795] with [2.]
+global_step=12599, episodic_return=-63.77365493774414
+global_step=12599, episodic_cost=0
+replacing: [1.4559278] with [-2.]
+replacing: [1.6642311] with [-2.]
+replacing: [1.8847789] with [-2.]
+replacing: [1.661381] with [-2.]
+replacing: [1.862583] with [2.]
+replacing: [1.9981239] with [2.]
+replacing: [1.8658152] with [2.]
+replacing: [1.9484106] with [2.]
+replacing: [1.8646446] with [2.]
+replacing: [1.9978489] with [2.]
+replacing: [1.9806399] with [2.]
+replacing: [1.9922915] with [2.]
+replacing: [1.9830563] with [2.]
+replacing: [1.9957258] with [2.]
+replacing: [0.9961018] with [2.]
+global_step=12799, episodic_return=-120.78089904785156
+global_step=12799, episodic_cost=0
+replacing: [1.0141221] with [-2.]
+replacing: [1.8072045] with [-2.]
+replacing: [1.7172759] with [-2.]
+replacing: [-1.5103773] with [2.]
+replacing: [1.8254627] with [2.]
+global_step=12999, episodic_return=-181.66920471191406
+global_step=12999, episodic_cost=0
+replacing: [1.5976527] with [-2.]
+replacing: [1.435488] with [-2.]
+replacing: [1.5875771] with [-2.]
+replacing: [1.6499047] with [-2.]
+replacing: [1.7026612] with [-2.]
+replacing: [1.6609076] with [2.]
+replacing: [1.9084804] with [2.]
+global_step=13199, episodic_return=-122.41304016113281
+global_step=13199, episodic_cost=0
+replacing: [1.007029] with [-2.]
+replacing: [1.3473103] with [-2.]
+replacing: [1.865341] with [-2.]
+replacing: [1.8856776] with [-2.]
+replacing: [1.9895035] with [-2.]
+replacing: [1.9836636] with [2.]
+global_step=13399, episodic_return=-119.51231384277344
+global_step=13399, episodic_cost=0
+replacing: [0.38596013] with [-2.]
+replacing: [1.3410633] with [-2.]
+replacing: [0.7328016] with [-2.]
+replacing: [1.9793128] with [-2.]
+global_step=13599, episodic_return=-176.31272888183594
+global_step=13599, episodic_cost=0
+replacing: [1.7037127] with [-2.]
+replacing: [1.3656983] with [-2.]
+replacing: [1.9860857] with [2.]
+replacing: [1.9737917] with [2.]
+global_step=13799, episodic_return=-177.05503845214844
+global_step=13799, episodic_cost=0
+replacing: [0.5695913] with [-2.]
+replacing: [0.5886483] with [-2.]
+replacing: [1.6706244] with [-2.]
+replacing: [1.6249297] with [-2.]
+global_step=13999, episodic_return=-183.2509307861328
+global_step=13999, episodic_cost=0
+replacing: [1.2889957] with [-2.]
+replacing: [1.8875448] with [2.]
+global_step=14199, episodic_return=-123.85011291503906
+global_step=14199, episodic_cost=0
+replacing: [0.95561695] with [-2.]
+replacing: [0.5038029] with [-2.]
+replacing: [0.52197075] with [-2.]
+replacing: [0.29988095] with [-2.]
+replacing: [1.7713383] with [-2.]
+replacing: [1.5619955] with [-2.]
+global_step=14399, episodic_return=-124.4256362915039
+global_step=14399, episodic_cost=0
+replacing: [1.4947543] with [-2.]
+replacing: [1.5071316] with [-2.]
+replacing: [1.9888954] with [2.]
+replacing: [1.9859097] with [2.]
+global_step=14599, episodic_return=-122.4146728515625
+global_step=14599, episodic_cost=0
+global_step=14799, episodic_return=-4.221693515777588
+global_step=14799, episodic_cost=0
+replacing: [0.5313017] with [-2.]
+global_step=14999, episodic_return=-179.3720245361328
+global_step=14999, episodic_cost=0

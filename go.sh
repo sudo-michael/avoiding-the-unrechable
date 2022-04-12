@@ -17,3 +17,30 @@
 # python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 15000 
 # python hj_sac.py --gym-id dubins3d-v0 --eval --checkpoint checkpoints/dubins3d-v0__hj_sac__2__1638986185/sac_checkpoint_50000
 # python hj_sac.py --gym-id dubins3d-v0 --eval --checkpoint checkpoints/dubins3d-v0__hj_sac__2__1638986185/sac_checkpoint_50000
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 15000  --use-hj False
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 15000  --use-hj True
+# python hj_load.py --gym-id dubins3d-v0 --checkpoint checkpoints/dubins3d-v0__hj_sac__2__1639168570/sac_checkpoint_15000 --use-hj True
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 15000 --use-hj True
+# python hj_load.py --gym-id dubins3d-v0 --checkpoint checkpoints/dubins3d-v0__hj_sac__2__1639168570/sac_checkpoint_15000 --use-hj True
+# python hj_load.py --gym-id dubins3d-v0 --checkpoint checkpoints/dubins3d-v0__hj_sac__2__1639168907/sac_checkpoint_15000 --use-hj True
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 15000 --use-hj False --seed 0
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 15000 --use-hj True --seed 0
+# python hj_load.py --gym-id dubins3d-v0 --seed 0  --checkpoint checkpoints/dubins3d-v0__hj_sac__1639169471__1639169471/sac_checkpoint_15000 --use-hj True
+# python hj_load.py --gym-id dubins3d-v0 --seed 0  --checkpoint checkpoints/dubins3d-v0__hj_sac__1639169375__1639169375/sac_checkpoint_15000 --use-hj False
+# least restrictive cost
+# python hj_load.py --gym-id dubins3d-v0 --seed 0  --checkpoint checkpoints/dubins3d-v0__hj_sac__2__1639172674/sac_checkpoint_15000 --use-hj True
+
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 30000 --use-hj True --seed 0
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 30000 --use-hj True --seed 0 --checkpoint checkpoints/dubins3d-v0__hj_sac__1644955962__1644955962/sac_checkpoint_30000 --eval True
+
+# goal is to increase rate of success
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 25000 --use-hj True --seed 0  --use-hirl True
+# python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 30000 --use-hj True --seed 0  --use-hirl True --hirl-penalty 1000
+python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 30000 --use-hj True --seed 0  --use-hirl True --hirl-penalty 500
+python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 30000 --use-hj True --seed 0  --use-hirl True --hirl-penalty 250
+python hj_sac.py --gym-id dubins3d-v0 --total-timesteps 30000 --use-hj True --seed 0  --use-hirl True --hirl-penalty 100
+
+# dubins3d-v0__hj_sac__1644976647__1644976647
+# dubins3d-v0__hj_sac__1644976986__1644976986
+# dubins3d-v0__hj_sac__1644977305__1644977305
+# dubins3d-v0__hj_sac__1644977654__1644977654
