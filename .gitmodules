@@ -7,3 +7,6 @@
 [submodule "cleanrl"]
 	path = cleanrl
 	url = git@github.com:sudo-michael/cleanrl.git
+[submodule "matlab/helperOC"]
+	path = matlab/helperOC
+	url = git@github.com:sudo-michael/helperOC.git
