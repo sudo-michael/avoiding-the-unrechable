@@ -47,7 +47,7 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="Safe-Pendulum-v1",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=15_000,
+    parser.add_argument("--total-timesteps", type=int, default=8_000,
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=int(1e6),
         help="the replay memory buffer size")
@@ -61,7 +61,7 @@ def parse_args():
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
         help="the scale of exploration noise")
-    parser.add_argument("--learning-starts", type=int, default=5_000,
+    parser.add_argument("--learning-starts", type=int, default=0,
         help="timestep to start learning")
     parser.add_argument("--policy-lr", type=float, default=3e-4,
         help="the learning rate of the policy network optimizer")
@@ -81,12 +81,20 @@ def parse_args():
         help="automatic tuning of the entropy coefficient")
     parser.add_argument("--use-hj", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use safety controller")
+    parser.add_argument("--sample-uniform", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="sampe hj uniform")
+    parser.add_argument("--reward-hj", type=int, default=0,
+        help="bonus for encouraging hj")
     parser.add_argument("--hj-stop-steps", type=int, default=np.iinfo(np.int32).max,
         help="timestep to start learning")
     parser.add_argument("--reward-shape", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="pentalty for bad actions")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Reset if unsafe, use min_reward / (1 - dicount facor")
+    parser.add_argument("--use-min-reward", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Reset if unsafe, use min_reward")
+    parser.add_argument("--unform_safe_action", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="sample action uniformally that are safe")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -272,6 +280,13 @@ if __name__ == "__main__":
         envs.single_action_space,
         device=device,
     )
+
+    rb_near_brt = CostReplayBuffer(
+        args.buffer_size,
+        envs.single_observation_space,
+        envs.single_action_space,
+        device=device,
+    )
     start_time = time.time()
 
     # TRY NOT TO MODIFY: start the game
@@ -284,6 +299,7 @@ if __name__ == "__main__":
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         used_hj = False
+        near_brt = False
         og_actions = []
         if global_step < args.learning_starts:
             actions = np.array(
@@ -305,8 +321,15 @@ if __name__ == "__main__":
                         use_opt = True
                         hj_use_counter += 1
                         og_actions.append((idx, copy.deepcopy(actions[idx])))
+
+                        if args.sample_uniform:
+                            low, high = controller.safe_ctrl_bnds(state)
+                            opt_ctrl = [np.random.uniform(low, high)]
+
                         actions[idx] = opt_ctrl
 
+                    if value <= 0.2:
+                        near_brt = True
                     writer.add_scalar("sanity/use_hj", hj_use_counter, global_step)
 
         # TRY NOT TO MODIFY: execute the game and log data.
@@ -327,6 +350,10 @@ if __name__ == "__main__":
                 reward_shape_actions[idx] = og_action
                 print(f"replacing: {og_action} with {actions[idx]}")
 
+        if args.use_hj and args.reward_hj != 0:
+            for idx, og_action in og_actions:
+                rewards[idx] = args.reward_hj
+
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         for info in infos:
             if "safe" in info.keys():
@@ -335,9 +362,8 @@ if __name__ == "__main__":
 
             if "episode" in info.keys():
                 print(
-                    f"global_step={global_step}, episodic_return={info['episode']['r']}"
+                    f"global_step={global_step}, episodic_return={info['episode']['r']} episodic_cost={ep_cost}"
                 )
-                print(f"global_step={global_step}, episodic_cost={ep_cost}")
                 writer.add_scalar(
                     "charts/episodic_return", info["episode"]["r"], global_step
                 )
@@ -348,7 +374,10 @@ if __name__ == "__main__":
         if args.done_if_unsafe:
             for idx, info in enumerate(infos):
                 if not info["safe"]:
-                    rewards[idx][0] = -16 / (1 - args.gamma)
+                    if args.use_min_reward:
+                        rewards[idx] = -16
+                    else:
+                        rewards[idx] = -16 / (1 - args.gamma)
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
         real_next_obs = next_obs.copy()
@@ -356,6 +385,9 @@ if __name__ == "__main__":
             if d:
                 real_next_obs[idx] = infos[idx]["terminal_observation"]
         rb.add(obs, real_next_obs, actions, rewards, costs, dones, infos)
+
+        if args.use_hj and near_brt:
+            rb_near_brt.add(obs, real_next_obs, actions, rewards, costs, dones, infos)
 
         if args.reward_shape:
             rb.add(
