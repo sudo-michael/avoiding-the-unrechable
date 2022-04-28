@@ -174,7 +174,9 @@ class PendulumEnv(gym.Env):
     ):
         super().reset(seed=seed)
         high = np.array([np.pi, 1])
-        while True:
+        self.state = self.np_random.uniform(low=-high, high=high)
+
+        while True and self.matlab_controller:
             self.state = self.np_random.uniform(low=-high, high=high)
             opt_ctrl, value = self.matlab_controller.opt_ctrl_value(self.state)
             if value > 0.0:
