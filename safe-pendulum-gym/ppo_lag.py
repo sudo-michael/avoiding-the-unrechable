@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.nn.functional import softplus
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
 
@@ -42,7 +43,7 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="Safe-Pendulum-v1",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=500_000,
+    parser.add_argument("--total-timesteps", type=int, default=450_000,
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, default=2e-3,
         help="the learning rate of the optimizer")
@@ -76,6 +77,8 @@ def parse_args():
         help="the maximum norm for the gradient clipping")
     parser.add_argument("--target-kl", type=float, default=None,
         help="the target KL divergence threshold")
+    parser.add_argument("--d", type=float, default=0.1,
+        help="Safety Threshold limit")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -95,7 +98,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
         # env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         # env = gym.wrappers.NormalizeReward(env)
         # env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
-        env.seed(seed)
+        env.seed(seed=seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
         return env
@@ -210,6 +213,9 @@ if __name__ == "__main__":
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
+    k = torch.ones(1, requires_grad=True, device=device)
+    k_optimizer = optim.Adam([k], lr=args.learning_rate)
+
     # ALGO Logic: Storage setup
     obs = torch.zeros(
         (args.num_steps, args.num_envs) + envs.single_observation_space.shape
@@ -274,10 +280,13 @@ if __name__ == "__main__":
                         "charts/episodic_return", item["episode"]["r"], global_step
                     )
                     writer.add_scalar(
-                        "charts/episodic_length", item["episode"]["c"], global_step
+                        "charts/episodic_cost", item["episode"]["c"], global_step
                     )
                     writer.add_scalar(
                         "charts/episodic_length", item["episode"]["l"], global_step
+                    )
+                    writer.add_scalar(
+                        "charts/total_cost", item["episode"]["tc"], global_step
                     )
                     break
 
@@ -376,6 +385,8 @@ if __name__ == "__main__":
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(
                     b_obs[mb_inds], b_actions[mb_inds]
                 )
+                newvaluecost = agent.get_cost(b_obs[mb_inds])
+
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -400,15 +411,15 @@ if __name__ == "__main__":
                 #     )
 
                 # Policy loss
-                pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(
+                pg_loss1 = mb_advantages * ratio
+                pg_loss2 = mb_advantages * torch.clamp(
                     ratio, 1 - args.clip_coef, 1 + args.clip_coef
                 )
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
-
+                pg_loss = torch.min(pg_loss1, pg_loss2).mean()
 
                 # Surgate loss
                 sg_loss = mb_advantages_cost * ratio
+                sg_loss = sg_loss.mean() - args.d
 
                 # Value loss
                 newvalue = newvalue.view(-1)
@@ -423,13 +434,29 @@ if __name__ == "__main__":
                 else:
                     v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
 
+                # Value cost loss
+                newvaluecost = newvaluecost.view(-1)
+                vc_loss = 0.5 * ((-b_costs[mb_inds]) ** 2).mean()
+
                 entropy_loss = entropy.mean()
-                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+                # I really hate that torch is minimizing
+                loss = (
+                    -pg_loss  # maximize reward
+                    - args.ent_coef * entropy_loss  # maximize entropy
+                    + v_loss * args.vf_coef  # minimize v
+                    + softplus(k).detach() * sg_loss  # add penalty for violating costs
+                    + vc_loss  # minimize vc
+                )
 
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
+
+                k_optimizer.zero_grad()
+                k_loss = k * -sg_loss.detach()
+                k_loss.backward()
+                k_optimizer.step()
 
             if args.target_kl is not None:
                 if approx_kl > args.target_kl:
@@ -444,8 +471,11 @@ if __name__ == "__main__":
             "charts/learning_rate", optimizer.param_groups[0]["lr"], global_step
         )
         writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+        writer.add_scalar("losses/value_cost_loss", vc_loss.item(), global_step)
         writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
         writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+        writer.add_scalar("losses/k", k_loss.item(), global_step)
+        writer.add_scalar("losses/sg", sg_loss.item(), global_step)
         writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
