@@ -10,3 +10,6 @@
 [submodule "matlab/helperOC"]
 	path = matlab/helperOC
 	url = git@github.com:sudo-michael/helperOC.git
+[submodule "atu/optimized_dp"]
+	path = atu/optimized_dp
+	url = git@github.com:sudo-michael/optimized_dp.git
