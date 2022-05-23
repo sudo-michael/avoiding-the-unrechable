@@ -1,6 +1,3 @@
-# modified from https://github.com/openai/gym/blob/master/gym/envs/classic_control/pendulum.py
-__credits__ = ["Carlos Luis"]
-
 from turtle import left
 from typing import Optional
 from os import path
@@ -16,7 +13,11 @@ from gym.utils import seeding
 from scipy.integrate import solve_ivp
 
 
-class SafePendulumEnv(gym.Env):
+from .saute_env.envs.wrappers.safe_env import SafeEnv
+from .saute_env.envs.wrappers.saute_env import saute_env
+
+
+class SafePendulumEnv(gym.Env, SafeEnv):
     """
     ### Description
 
@@ -92,7 +93,6 @@ class SafePendulumEnv(gym.Env):
     ):
         self.unsafe_lower = unsafe_lower
         self.unsafe_upper = unsafe_upper
-        self.hazard_area_size = np.pi * (1.0 / 4)
         self.max_speed = 8
         self.max_torque = 2.0
         self.dt = 0.1
@@ -278,26 +278,6 @@ class SafePendulumEnv(gym.Env):
             right_arch,
             (255, 0, 0, 255),
         )
-
-        # unsafe area
-        left_arch = min(
-            int((self.unsafe_lower - self.hazard_area_size) * 180 / np.pi + 90),
-            int((self.unsafe_upper + self.hazard_area_size) * 180 / np.pi + 90),
-        )
-        right_arch = max(
-            int((self.unsafe_lower - self.hazard_area_size) * 180 / np.pi + 90),
-            int((self.unsafe_upper + self.hazard_area_size) * 180 / np.pi + 90),
-        )
-        gfxdraw.pie(
-            self.surf,
-            self.screen_dim // 2,
-            self.screen_dim // 2,
-            150,
-            left_arch,
-            right_arch,
-            (0, 255, 0, 255),
-        )
-
         # gfxdraw.rectangle(self.surf, (self.screen_dim // 2 - 150, self.screen_dim // 2, 150, 50), (255, 0, 0, 255))
 
         self.surf = pygame.transform.flip(self.surf, False, True)
@@ -321,36 +301,10 @@ class SafePendulumEnv(gym.Env):
         norm_th = angle_normalize(th)
         return not (self.unsafe_lower <= norm_th <= self.unsafe_upper)
 
-    def _is_near_unsafe_area_batch(self, thetas):
-        return ((self.unsafe_lower - self.hazard_area_size) <= thetas) and (
-            thetas <= (self.unsafe_upper + self.hazard_area_size)
-        )
-
     def _safety_cost_fn(
-        self, states: np.ndarray, actions: np.ndarray, next_states: np.ndarray
+        self, state: np.ndarray, action: np.ndarray, next_state: np.ndarray
     ) -> np.ndarray:
-        """Computes a linear safety cost between the current position
-        (if its near the unsafe area, aka in the hazard region)
-        and the centre of the unsafe region"""
-        unsafe_angle_middle = 0.5 * (
-            self.unsafe_lower + self.unsafe_upper
-        )  # 25 = (20 + 30) /2
-        max_distance = (
-            self.hazard_area_size
-            + (unsafe_angle_middle - self.unsafe_lower) * 1.0
-        )  # 50 = 45 + (25 - 20)
-        assert (
-            type(states) is np.ndarray
-            and type(next_states) is np.ndarray
-            and type(actions) is np.ndarray
-        ), "Arguments must be np.ndarray"
-        thetas = np.arctan2(states[..., 1], states[..., 0])
-        dist_to_center = np.abs(unsafe_angle_middle - thetas)  # |25 - theta|
-        unsafe_mask = np.float64(
-            self._is_near_unsafe_area_batch(thetas)
-        )  # 20-45 = -25 <= theta <= 75 = 30+45
-        costs = ((max_distance - dist_to_center) / (max_distance)) * unsafe_mask
-        return costs
+        return super()._safety_cost_fn(state, action, next_state)
 
 
 def angle_normalize(x):
@@ -368,7 +322,7 @@ if __name__ in "__main__":
     import gym
     import atu
 
-    env = gym.make("Safe-Pendulum-v1")
+    env = gym.make("Safe-Pendulum-Hard-v1")
     obs = env.reset()
     for _ in range(100):
         env.step(env.action_space.sample())
