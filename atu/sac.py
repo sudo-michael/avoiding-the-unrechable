@@ -21,6 +21,10 @@ from scipy.stats import norm
 from helper_oc_controller import HelperOCController
 
 
+from wrappers import RecordEpisodeStatisticsWithCost
+import atu
+
+
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
@@ -40,6 +44,8 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--eval-every", type=int, default=10,
+        help="Eval")
     parser.add_argument("--lagrange", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use Sac Lagrange") # https://github.com/AlgTUDelft/WCSAC/blob/main/wc_sac/sac/saclag.py
 
@@ -110,7 +116,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
             )
         else:
             env = gym.make(env_id)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
+        env = RecordEpisodeStatisticsWithCost(env)
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
@@ -193,6 +199,41 @@ class Actor(nn.Module):
         return super(Actor, self).to(device)
 
 
+def eval_policy(envs, actor, global_step):
+    print("eval policy")
+    actor.eval()
+    total_episodic_return = 0
+    total_episodic_cost = 0
+    EPISODES = 10
+    for episode in range(EPISODES):
+        obs = envs.reset()
+        done = False
+        while not done:
+            with torch.no_grad():
+                actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
+            actions = actions.cpu().numpy()
+
+            next_obs, rewards, dones, infos = envs.step(actions)
+            costs = [not info["safe"] for info in infos]
+
+            obs = next_obs
+            # TRY NOT TO MODIFY: record rewards for plotting purposes
+            for info in infos:
+                if "episode" in info.keys():
+                    total_episodic_return += info["episode"]["r"]
+                    total_episodic_cost += info["episode"]["c"]
+                    done = True
+                    break
+
+    writer.add_scalar("eval/return", total_episodic_return / EPISODES, global_step)
+    writer.add_scalar("eval/cost", total_episodic_cost / EPISODES, global_step)
+    print(
+        f"eval: return: {total_episodic_return / EPISODES} cost: {total_episodic_cost / EPISODES}"
+    )
+
+    actor.train()
+
+
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -225,7 +266,10 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, 0, 0, args.capture_video, run_name)]
+        [make_env(args.env_id, args.seed, 0, args.capture_video, run_name)]
+    )
+    eval_envs = gym.vector.SyncVectorEnv(
+        [make_env(args.env_id, args.seed + 1_000, 0, args.capture_video, run_name)]
     )
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
@@ -295,6 +339,7 @@ if __name__ == "__main__":
     hj_use_counter = 0
 
     ep_cost = 0
+    episode_counter = 0
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         used_hj = False
@@ -368,6 +413,11 @@ if __name__ == "__main__":
                 )
                 writer.add_scalar("charts/episodic_cost", ep_cost, global_step)
                 ep_cost = 0
+                episode_counter += 1
+
+                if episode_counter % args.eval_every == 0:
+                    print(episode_counter)
+                    eval_policy(eval_envs, actor, global_step)
                 break
 
         if args.done_if_unsafe:
@@ -409,7 +459,7 @@ if __name__ == "__main__":
                 info = infos[idx]
                 if "safe" in info.keys():
                     if not info["safe"]:
-                        print(env.state)
+                        print(f"unsafe state: {env.state}")
 
             data = rb.sample(args.batch_size)
             with torch.no_grad():
@@ -543,5 +593,7 @@ if __name__ == "__main__":
                         "losses/alpha_loss", alpha_loss.item(), global_step
                     )
 
+    eval_policy(eval_envs, actor, global_step)
     envs.close()
+    eval_envs.close()
     writer.close()
