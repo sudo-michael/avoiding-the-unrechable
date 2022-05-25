@@ -51,8 +51,8 @@ class SauteWrapper(gym.Wrapper):
             )
 
         self.safety_state = 1.0  # z in paper
-        self.safety_budget = safety_budget  # d
-        self.saute_discount_facctor = saute_discount_factor
+        self.safety_budget = np.float32(safety_budget)  # d
+        self.saute_discount_factor = saute_discount_factor
         self.unsafe_reward = unsafe_reward
 
         if self.use_state_augmentation:
@@ -63,6 +63,18 @@ class SauteWrapper(gym.Wrapper):
                 np.hstack([env.observation_space.high, np.inf]), dtype=np.float32
             )
             self.observation_space = spaces.Box(low=self.obs_low, high=self.obs_high)
+
+    # @property
+    # def safety_budget(self):
+    #     return self._safety_budget
+
+    # @property
+    # def saute_discount_factor(self):
+    #     return self._saute_discount_factor
+
+    # @property
+    # def unsafe_reward(self):
+    #     return self._unsafe_reward
 
     def reset(self, **kwargs):
         return_info = kwargs.get("return_info", False)
@@ -99,9 +111,9 @@ class SauteWrapper(gym.Wrapper):
 
     def safety_step(self, cost: np.ndarray) -> np.ndarray:
         """ Update the normalized safety state z' = (z - l / d) / gamma. """
-        self._safety_state -= cost / self.safety_budget
-        self._safety_state /= self.saute_discount_factor
-        return self._safety_state
+        self.safety_state -= cost / self.safety_budget
+        self.safety_state /= self.saute_discount_factor
+        return self.safety_state
 
     def augment_obs(self, obs: np.ndarray, safety_state: float):
         augmented_obs = (
@@ -112,6 +124,7 @@ class SauteWrapper(gym.Wrapper):
 
 if __name__ == "__main__":
     import gym
+
     env = gym.make("Pendulum-v1")
     env = SauteWrapper(env)
     env.reset()
