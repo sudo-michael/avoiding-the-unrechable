@@ -1,104 +1,11 @@
-from turtle import width
 import gym
+import os
 import pygame
 from gym.spaces import Box
+from atu.optimized_dp.Grid.GridProcessing import Grid
+from atu.optimized_dp.dubin_hallway import g as grid
 import numpy as np
 import math
-
-
-class Grid:
-    def __init__(self, minBounds, maxBounds, dims, pts_each_dim, periodicDims=[]):
-        """
-
-        Args:
-            minBounds (list): The lower bounds of each dimension in the grid
-            maxBounds (list): The upper bounds of each dimension in the grid
-            dims (int): The dimension of grid
-            pts_each_dim (list): The number of points for each dimension in the grid
-            periodicDim (list, optional): A list of periodic dimentions (0-indexed). Defaults to [].
-        """
-        self.max = maxBounds
-        self.min = minBounds
-        self.dims = len(pts_each_dim)
-        self.pts_each_dim = pts_each_dim
-        self.pDim = periodicDims
-
-        # Exclude the upper bounds for periodic dimensions is not included
-        # e.g. [-pi, pi)
-        for dim in self.pDim:
-            self.max[dim] = self.min[dim] + (self.max[dim] - self.min[dim]) * (
-                1 - 1 / self.pts_each_dim[dim]
-            )
-        self.dx = (self.max - self.min) / (self.pts_each_dim - 1.0)
-
-        """
-        Below is re-shaping the self.vs so that we can make use of broadcasting
-        self.vs[i] is reshape into (1,1, ... , pts_each_dim[i], ..., 1) such that pts_each_dim[i] is used in ith position
-        """
-        self.vs = []
-        self.grid_points = []
-        for i in range(dims):
-            tmp = np.linspace(self.min[i], self.max[i], num=self.pts_each_dim[i])
-            broadcast_map = np.ones(self.dims, dtype=int)
-            broadcast_map[i] = self.pts_each_dim[i]
-            self.grid_points.append(tmp)
-
-            # in order to add our range of points to our grid
-            # we need to modify the shape of tmp in order to match
-            # the size of the grid for one of the axis
-            tmp = np.reshape(tmp, tuple(broadcast_map))
-            self.vs.append(tmp)
-
-    def get_index(self, state):
-        """Returns a tuple of the closest index of each state in the grid
-
-        Args:
-            state (tuple): state of dynamic object
-        """
-        index = []
-
-        for i, s in enumerate(state):
-            idx = np.searchsorted(self.grid_points[i], s)
-            if idx > 0 and (
-                idx == len(self.grid_points[i])
-                or math.fabs(s - self.grid_points[i][idx - 1])
-                < math.fabs(s - self.grid_points[i][idx])
-            ):
-                index.append(idx - 1)
-            else:
-                index.append(idx)
-
-        return tuple(index)
-
-    def get_value(self, V, state):
-        """Obtain the approximate value of a state
-
-        Assumes that the state is within the bounds of the grid
-
-        Args:
-            V (np.array): value function of solved HJ PDE
-            state (tuple): state of dynamic object
-
-        Returns:
-            [float]: V(state)
-        """
-        index = self.get_index(state)
-        return V[index]
-
-    def index_to_grid_point(self, index):
-        point = []
-
-        for i, s in enumerate(index):
-            idx = np.searchsorted(self.grid_points[i], s)
-            if idx > 0 and (
-                idx == len(self.grid_points[i])
-                or math.fabs(s - self.grid_points[i][idx - 1])
-                < math.fabs(s - self.grid_points[i][idx])
-            ):
-                point.append(self.grid_points[i][idx - 1])
-            else:
-                point.append(self.grid_points[i][idx])
-        return point
 
 
 def spa_deriv(index, V, g, periodic_dims=[]):
@@ -232,15 +139,12 @@ class DubinsHallwayEnv(gym.Env):
         self.top_wall = 4.5
 
         self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
-        self.grid = Grid(
-            np.array([-4.5, -4.5, -np.pi]),
-            np.array([4.5, 4.5, np.pi]),
-            3,
-            np.array([80, 80, 40]),
-            [2],
-        )
+        self.grid = grid
         # self.brt = np.load("./atu/envs/brt.npy")
-        self.brt = np.load("max_over_min_brt.npy")
+
+        path = os.path.abspath(__file__)
+        dir_path = os.path.dirname(path)
+        self.brt = np.load(os.path.join(dir_path, "assets/brts/max_over_min_brt.npy"))
 
     def reset(self, seed=None):
         self.car.x = np.array([-1.5, 2.5, -np.pi / 2])
@@ -441,6 +345,7 @@ class DubinsHallwayEnv(gym.Env):
 
 
 if __name__ in "__main__":
+
     import time
 
     env = DubinsHallwayEnv()
