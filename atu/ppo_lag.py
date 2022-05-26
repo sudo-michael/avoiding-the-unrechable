@@ -16,8 +16,8 @@ from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
 
 
-from safe_pendulum import PendulumEnv
 from wrappers import RecordEpisodeStatisticsWithCost
+import atu
 
 
 def parse_args():
@@ -39,6 +39,8 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--eval-every", type=int, default=0, 
+        help="Eval agent every x steps")
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="Safe-Pendulum-v1",
@@ -206,6 +208,14 @@ if __name__ == "__main__":
             for i in range(args.num_envs)
         ]
     )
+
+    envs_eval = gym.vector.SyncVectorEnv(
+        [
+            make_env(args.env_id, args.seed + i, i, args.capture_video, run_name)
+            for i in range(1)
+        ]
+    )
+
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
@@ -444,8 +454,8 @@ if __name__ == "__main__":
                     -pg_loss  # maximize reward
                     - args.ent_coef * entropy_loss  # maximize entropy
                     + v_loss * args.vf_coef  # minimize v
-                    + softplus(k).detach() * sg_loss  # add penalty for violating costs
-                    + vc_loss  # minimize vc
+                    # + softplus(k).detach() * sg_loss  # add penalty for violating costs
+                    # + vc_loss  # minimize vc
                 )
 
                 optimizer.zero_grad()
@@ -484,5 +494,36 @@ if __name__ == "__main__":
             "charts/SPS", int(global_step / (time.time() - start_time)), global_step
         )
 
+        print(global_step % args.eval_every)
+        if args.eval_every and global_step % args.eval_every == 0:
+            rollouts = 10
+            total_reward = 0
+            total_cost = 0
+            obs = envs_eval.reset()
+            done = False
+            for rollout in range(rollouts):
+                while not done:
+                    with torch.no_grad():
+                        action, logprob, _, value = agent.get_action_and_value(next_obs)
+                    next_obs, reward, done, info = envs.step(action.cpu().numpy())
+                    cost = np.zeros_like(reward)
+
+                for item in info:
+                    if "episode" in item.keys():
+                        print(
+                            f"eval: {rollout} global_step={global_step}, episodic_return={item['episode']['r']} episodic_cost={item['episode']['c']}"
+                        )
+                        total_reward += item["episode"]["r"]
+                        total_cost += item["episode"]["c"]
+
+                obs = envs_eval.reset()
+                done = True
+            writer.add_scalar(
+                "eval/average_reward", total_reward / rollouts, global_step
+            )
+
+            writer.add_scalar("eval/average_cost", total_cost / rollouts, global_step)
+
     envs.close()
+    envs_eval.close()
     writer.close()
