@@ -190,6 +190,8 @@ class DubinsHallwayEnv(gym.Env):
         self.car.x[2] = self.normalize_angle(self.car.x[2])
 
         done = False
+        info = {}
+        info['cost'] = 0
         if self.collision_rect_circle(
             self.obstacle_location[0],
             self.obstacle_location[1],
@@ -200,15 +202,14 @@ class DubinsHallwayEnv(gym.Env):
             self.car.r,
         ):
             done = True
+            info["cost"] = 1
         elif self.near_goal():
             done = True
 
         # calculate reward
         reward = -np.linalg.norm(self.car.x[:2] - self.goal_location[:2])
 
-        info = {}
         info["V_brt"] = self.grid.get_value(self.brt, self.car.x)
-        # print(self.grid.get_value(self.brt, self.car.x))
 
         next_state = self.car.x
 
