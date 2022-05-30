@@ -359,7 +359,6 @@ class DubinsHallwayEnv(gym.Env):
         return False
 
     def near_goal(self):
-        print(np.linalg.norm(self.goal_location[:2] - self.car.x[:2]))
         return (
             np.linalg.norm(self.goal_location[:2] - self.car.x[:2])
             <= self.goal_location[2] + self.car.r
