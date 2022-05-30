@@ -84,7 +84,7 @@ class DubinsCar:
         self.d_max = d_max
         self.u_mode = u_mode
         self.d_mode = d_mode
-        self.r = 0.5
+        self.r = 0.3
 
     def opt_ctrl(self, t, state, spat_deriv):
         opt_w = self.w_max
@@ -108,12 +108,26 @@ class DubinsHallwayEnv(gym.Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
-    def __init__(self) -> None:
+    def __init__(self, use_reach_avoid=True) -> None:
         self.car = DubinsCar()
         self.goal = 0
         self.screen = None
         self.clock = None
         self.isopen = True
+        self.use_reach_avoid = use_reach_avoid
+
+        path = os.path.abspath(__file__)
+        dir_path = os.path.dirname(path)
+        if self.use_reach_avoid:
+            self.car = DubinsCar(u_mode="min", d_mode="max")  # ra
+            self.brt = np.load(
+                os.path.join(dir_path, "assets/brts/reach_avoid_hallway.npy")
+            )
+        else:
+            self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
+            self.brt = np.load(
+                os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
+            )
 
         self.dt = 0.05
 
@@ -121,14 +135,17 @@ class DubinsHallwayEnv(gym.Env):
             low=-self.car.w_max, high=self.car.w_max, dtype=np.float32, shape=(1,)
         )
 
-        self.word_boundary = np.array([10, 10, np.pi], dtype=np.float32)
+        self.word_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
 
         self.observation_space = Box(
-            low=-self.word_boundary, high=self.word_boundary, dtype=np.float32
+            low=-self.word_boundary,
+            high=self.word_boundary,
+            shape=(3,),
+            dtype=np.float32,
         )
 
-        self.goal_location = [-3, 2, 1.2, 1.2]  # x y w h
-        self.obstacle_location = [-4.5, -0.5, 6.5, 1.0]  # x y w h
+        self.goal_location = np.array([-2, 2.3, 0.5])  # x y r
+        self.obstacle_location = np.array([-4.5, -0.5, 6.5, 1.0])  # x y w h
 
         self.world_width = 10
         self.world_height = 10
@@ -138,19 +155,27 @@ class DubinsHallwayEnv(gym.Env):
         self.bottom_wall = -4.5
         self.top_wall = 4.5
 
-        self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
         self.grid = grid
         # self.brt = np.load("./atu/envs/brt.npy")
 
-        path = os.path.abspath(__file__)
-        dir_path = os.path.dirname(path)
-        self.brt = np.load(os.path.join(dir_path, "assets/brts/max_over_min_brt.npy"))
-
     def reset(self, seed=None):
-        self.car.x = np.array([-1.5, 2.5, -np.pi / 2])
+        # self.car.x = np.array([-1.5, 2.5, -np.pi / 2])
         # self.car.x = np.array([-1.5, -1.5, np.pi / 2])
-        # self.car.x = np.array([-1.5, -2, np.pi / 2])
-        return self.car.x
+        # self.car.x = np.array([-3, -2, np.pi / 2])
+        # return self.car.x
+        while True:
+            self.car.x = np.random.uniform(
+                low=-self.word_boundary, high=self.word_boundary
+            )
+
+            if self.use_reach_avoid:
+                if self.grid.get_value(self.brt, self.car.x) < 0.0:
+                    break
+            else:
+                if self.grid.get_value(self.brt, self.car.x) > 0.05:
+                    break
+
+        return np.array(self.car.x)
 
     def step(self, action: np.array):
         self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
@@ -175,16 +200,7 @@ class DubinsHallwayEnv(gym.Env):
             self.car.r,
         ):
             done = True
-
-        elif self.collision_rect_circle(
-            self.goal_location[0],
-            self.goal_location[1],
-            self.goal_location[2],
-            self.goal_location[3],
-            self.car.x[0],
-            self.car.x[1],
-            self.car.r,
-        ):
+        elif self.near_goal():
             done = True
 
         # calculate reward
@@ -237,14 +253,13 @@ class DubinsHallwayEnv(gym.Env):
         gfxdraw.vline(self.surf, ww2sw(-4.5), ww2sw(-4.5), wh2sh(4.5), (0, 0, 0))
         gfxdraw.vline(self.surf, ww2sw(4.5), ww2sw(-4.5), wh2sh(4.5), (0, 0, 0))
 
-        goal = pygame.Rect(
+        gfxdraw.filled_circle(
+            self.surf,
             ww2sw(self.goal_location[0]),
             wh2sh(self.goal_location[1]),
             world_to_screen(self.goal_location[2]),
-            world_to_screen(self.goal_location[3]),
+            (0, 255, 0),
         )
-
-        gfxdraw.box(self.surf, goal, (0, 255, 0))
 
         obstacle = pygame.Rect(
             ww2sw(self.obstacle_location[0]),
@@ -343,35 +358,39 @@ class DubinsHallwayEnv(gym.Env):
             return True
         return False
 
+    def near_goal(self):
+        print(np.linalg.norm(self.goal_location[:2] - self.car.x[:2]))
+        return (
+            np.linalg.norm(self.goal_location[:2] - self.car.x[:2])
+            <= self.goal_location[2] + self.car.r
+        )
+
 
 if __name__ in "__main__":
 
     import time
 
-    env = DubinsHallwayEnv()
-    obs = env.reset()
+    env = DubinsHallwayEnv(use_reach_avoid=False)
+    obs = env.reset(0)
     for i in range(500):
         env.render()
-
         value = env.grid.get_value(env.brt, obs)
-        print(f"{i} {value=}")
-
-        if value <= 0.1:
-            # if value <= 0.2:
+        print(f"{i} {value=} {obs=}")
+        if value <= 0.05:
             print("use opt")
             index = env.grid.get_index(obs)
             spat_deriv = spa_deriv(index, env.brt, env.grid, periodic_dims=[2])
             opt_ctrl = env.car.opt_ctrl(0, env.car.x, spat_deriv)
-            next_state, reward, done, info = env.step(opt_ctrl)
-        elif i % 2 == 0:
-            next_state, reward, done, info = env.step(env.action_space.high)
+            next_obs, reward, done, info = env.step(opt_ctrl)
+        # elif i % 2 == 0:
+        #     next_state, reward, done, info = env.step(env.action_space.high)
         else:
-            next_state, reward, done, info = env.step(env.action_space.low)
+            next_obs, reward, done, info = env.step(env.action_space.sample())
 
-        obs = next_state
+        obs = next_obs
 
         if done:
-            print(obs)
+            print(f"done: {obs}")
             break
 
         time.sleep(0.05)
