@@ -7,14 +7,14 @@ import os
 class HelperOCController:
     def __init__(self):
         print("connecting to matlab engine")
-        self.helperOC_path = os.path.join(pathlib.Path().resolve(), "matlab/helperOC")
-        self.eng = matlab.engine.start_matlab()
-        self.eng.addpath(self.eng.genpath(self.helperOC_path))
-        self.eng.addpath(
-            self.eng.genpath(os.path.join(pathlib.Path().resolve(), "matlab/ToolboxLS"))
-        )
+        # self.helperOC_path = os.path.join(pathlib.Path().resolve(), "matlab/helperOC")
+        # self.eng = matlab.engine.start_matlab()
+        # self.eng.addpath(self.eng.genpath(self.helperOC_path))
+        # self.eng.addpath(
+        #     self.eng.genpath(os.path.join(pathlib.Path().resolve(), "matlab/ToolboxLS"))
+        # )
 
-        self.vars = self.eng.eval(f"load('{self.helperOC_path}/pend_brt_min_max.mat')")
+        # self.vars = self.eng.eval(f"load('{self.helperOC_path}/pend_brt_min_max.mat')")
         print("connected to matlab engine")
 
     def opt_ctrl_value(self, state):

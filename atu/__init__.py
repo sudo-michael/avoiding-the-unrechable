@@ -20,3 +20,10 @@ register(
     entry_point="atu.envs:DubinsHallwayEnv",
     max_episode_steps=500,
 )
+
+register(
+    id="Safe-DubinsHallway-Flipped-v1",
+    entry_point="atu.envs:DubinsHallwayEnv",
+    max_episode_steps=500,
+    goal_location=np.array([-2, -2.3, 0.5]),
+)
