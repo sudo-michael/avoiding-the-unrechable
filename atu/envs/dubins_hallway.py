@@ -127,7 +127,11 @@ class DubinsHallwayEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
     def __init__(
-        self, use_reach_avoid=True, done_if_unsafe=False, use_disturbances=False, goal_location=np.array([-2, 2.3, 0.5])
+        self,
+        use_reach_avoid=True,
+        done_if_unsafe=False,
+        use_disturbances=False,
+        goal_location=np.array([-2, 2.3, 0.5]),
     ) -> None:
         self.car = DubinsCar()
         self.goal = 0
@@ -174,7 +178,7 @@ class DubinsHallwayEnv(gym.Env):
             dtype=np.float32,
         )
 
-        self.goal_location = goal_location # x y r
+        self.goal_location = goal_location  # x y r
         self.obstacle_location = np.array([-4.5, -0.5, 6.5, 1.0])  # x y w h
 
         self.world_width = 10
@@ -201,7 +205,6 @@ class DubinsHallwayEnv(gym.Env):
             ):  # place car in location that is always possible to avoid obstacle
                 break
 
-        self.car.x = np.array([-2.38940648, -2.94697383, 0.26001755])
         self.state = self.car.x
         print(f"intial state: {self.state}")
         return np.array(self.car.x)
@@ -247,6 +250,47 @@ class DubinsHallwayEnv(gym.Env):
         next_state = self.car.x
 
         self.state = self.car.x
+
+        return next_state, reward, done, info
+
+    def simulate_step(self, state: np.array, action: np.array):
+        """ assume state is [x, y, theta] """
+        next_state = self.car.dynamics(0, self.car.x, action) * self.dt + state
+        next_state[0] = min(
+            max(self.left_wall + self.car.r, next_state[0]),
+            self.right_wall - self.car.r,
+        )
+        next_state[1] = min(
+            max(self.bottom_wall + self.car.r, next_state[1]),
+            self.top_wall - self.car.r,
+        )
+        next_state[2] = self.normalize_angle(next_state[2])
+
+        done = False
+        info = {}
+        info["cost"] = 0
+        info["safe"] = True
+        if self.collision_rect_circle(
+            self.obstacle_location[0],
+            self.obstacle_location[1],
+            self.obstacle_location[2],
+            self.obstacle_location[3],
+            next_state[0],
+            next_state[1],
+            self.car.r,
+        ):
+            if self.done_if_unsafe:
+                done = True
+            info["cost"] = 1
+            info["safe"] = False
+        elif self.near_goal():
+            done = True
+
+        # calculate reward
+        reward = -np.linalg.norm(next_state[:2] - self.goal_location[:2])
+
+        # cost is based on distance to obstacle
+        info["hj_value"] = self.grid.get_value(self.brt, next_state)
 
         return next_state, reward, done, info
 

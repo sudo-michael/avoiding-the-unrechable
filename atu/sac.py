@@ -126,7 +126,7 @@ def parse_args():
 # controller = HelperOCController()
 
 
-def make_env(env_id, seed, idx, capture_video, run_name, saute):
+def make_env(env_id, seed, idx, capture_video, run_name, saute, eval=False):
     def thunk():
         if "Pendulum" in env_id:
             env = gym.make(
@@ -145,6 +145,8 @@ def make_env(env_id, seed, idx, capture_video, run_name, saute):
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            elif eval:
+                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}/eval")
 
         if saute:
             env = SauteWrapper(
@@ -314,10 +316,11 @@ if __name__ == "__main__":
             make_env(
                 args.env_id,
                 args.seed + 1_000,
-                0,
+                1,
                 args.capture_video,
                 run_name,
                 args.saute,
+                eval=True,
             )
         ]
     )
@@ -416,14 +419,27 @@ if __name__ == "__main__":
                         og_actions.append((idx, copy.deepcopy(actions[idx])))
                         actions[idx] = opt_ctrl
 
-                    writer.add_scalar("sanity/use_hj", hj_use_counter, global_step)
+                        if args.imagine_trajectory and used_hj:
+                            # obs is shape (1, 3)
+                            # deepcopy with pygame surface doesn't work
+                            next_obs, reward, done, info = env.simulate_step(
+                                obs[0], og_actions[-1][1]
+                            )  # action policy took
+                            cost = info.get("cost", 0)
+                            # vectorize?
+                            rb.add(
+                                obs,
+                                np.array([next_obs]),
+                                np.array([og_actions[-1][1]]),
+                                np.array(
+                                    [env.min_reward]
+                                ),  # maybe this should be min reward
+                                np.array([cost]),
+                                np.array([False]),
+                                [info],
+                            )
 
-                    if args.imagine_trajectory:
-                        imaginary_env = copy.deepcopy(env)
-                        next_obs, reward, done, info = env.step(
-                            og_action[-1][1]
-                        )  # action policy took
-                        cost = info.get("cost", 0)
+                    writer.add_scalar("sanity/use_hj", hj_use_counter, global_step)
 
         next_obs, rewards, dones, infos = envs.step(actions)
         costs = [info.get("cost", 0) for info in infos]
@@ -509,9 +525,9 @@ if __name__ == "__main__":
 
             for idx, env in enumerate(envs.envs):
                 info = infos[idx]
-                if "safe" in info.keys():
-                    if not info["safe"]:
-                        print(f"unsafe state: {env.state}")
+                # if "safe" in info.keys():
+                #     if not info["safe"]:
+                #         print(f"unsafe state: {env.state}")
 
             data = rb.sample(args.batch_size)
             with torch.no_grad():
@@ -527,14 +543,6 @@ if __name__ == "__main__":
                 next_q_value = data.rewards.flatten() + (
                     1 - data.dones.flatten()
                 ) * args.gamma * (min_qf_next_target).view(-1)
-
-                if args.lagrange:
-                    qfc_next_target = qfc_target(
-                        data.next_observations, next_state_actions
-                    )
-                    next_qc_value = data.rewards.flatten() + (
-                        1 - data.dones.flatten()
-                    ) * args.gamma * (qfc_next_target).view(-1)
 
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
