@@ -55,7 +55,7 @@ def parse_args():
         help="Use Saute") 
     parser.add_argument("--saute-discount-factor", type=float, default=0.99, nargs="?", const=True,
         help="Use Saute") 
-    parser.add_argument("--saute-unsafe-reward", type=float, default=1.0, nargs="?", const=True,
+    parser.add_argument("--saute-unsafe-reward", type=float, default=-10, nargs="?", const=True,
         help="Use Saute") 
     parser.add_argument("--saute-safety-budget", type=float, default=1.0, nargs="?", const=True,
         help="Use Saute") 
@@ -66,7 +66,7 @@ def parse_args():
     # parser.add_argument("--env-id", type=str, default="Safe-Pendulum-v1",
     parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=100_000,
+    parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=int(1e6),
         help="the replay memory buffer size")
@@ -118,6 +118,12 @@ def parse_args():
         help="sample action uniformally that are safe")
     parser.add_argument("--imagine-trajectory", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="sample action uniformally that are safe")
+    parser.add_argument("--imagine-unsafe-actions", type=int, default=0, nargs="?", const=True,
+        help="use unsafe actions")
+    parser.add_argument("--cost-for-hj", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="sample action uniformally that are safe")
+    # parser.add_argument("--", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    #     help="sample action uniformally that are safe")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -239,6 +245,7 @@ def eval_policy(envs, actor, global_step):
     total_episodic_return = 0
     total_episodic_cost = 0
     total_episodic_unsafe = 0
+    total_reach_goal = 0
     EPISODES = 10
     for episode in range(EPISODES):
         obs = envs.reset()
@@ -258,6 +265,7 @@ def eval_policy(envs, actor, global_step):
                     total_episodic_return += info["episode"]["r"]
                     total_episodic_cost += info["episode"]["c"]
                     total_episodic_unsafe += info["episode"]["us"]
+                    total_reach_goal += info.get("reach_goal", False)
                     done = True
                     break
 
@@ -266,8 +274,9 @@ def eval_policy(envs, actor, global_step):
         "eval/total_unsafe", total_episodic_unsafe / EPISODES, global_step
     )
     writer.add_scalar("eval/total_cost", total_episodic_cost / EPISODES, global_step)
+    writer.add_scalar("eval/reach_goal", total_reach_goal / EPISODES, global_step)
     print(
-        f"eval: average return: {total_episodic_return / EPISODES} average cost: {total_episodic_cost / EPISODES} average unsafe = {total_episodic_unsafe / EPISODES}"
+        f"eval: average return: {total_episodic_return / EPISODES} average cost: {total_episodic_cost / EPISODES} average unsafe = {total_episodic_unsafe / EPISODES} average reach goal = {total_reach_goal / EPISODES}"
     )
 
     actor.train()
@@ -414,7 +423,10 @@ if __name__ == "__main__":
                 for idx, env in enumerate(envs.envs):
                     if env.use_opt_ctrl() or args.always_use_hj:
                         used_hj = True
-                        opt_ctrl = env.opt_ctrl()
+                        if args.sample_uniform:
+                            opt_ctrl = env.safe_ctrl()
+                        else:
+                            opt_ctrl = env.opt_ctrl()
                         hj_use_counter += 1
                         og_actions.append((idx, copy.deepcopy(actions[idx])))
                         actions[idx] = opt_ctrl
@@ -439,10 +451,31 @@ if __name__ == "__main__":
                                 [info],
                             )
 
+                            for _ in range(args.imagine_unsafe_actions):
+                                unsafe_ctrl = env.unsafe_ctrl()
+
+                                next_obs, reward, done, info = env.simulate_step(
+                                    obs[0], unsafe_ctrl
+                                )  # action policy took
+                                cost = info.get("cost", 0)
+                                # vectorize?
+                                rb.add(
+                                    obs,
+                                    np.array([next_obs]),
+                                    unsafe_ctrl,
+                                    np.array(
+                                        [env.min_reward]
+                                    ),  # maybe this should be min reward
+                                    np.array([cost]),
+                                    np.array([False]),
+                                    [info],
+                                )
+
                     writer.add_scalar("sanity/use_hj", hj_use_counter, global_step)
 
-        next_obs, rewards, dones, infos = envs.step(actions)
-        costs = [info.get("cost", 0) for info in infos]
+        next_obs, rewards, dones, infos = envs.step(
+            [{"action": actions, "used_hj": used_hj}]
+        )
 
         if args.reward_shape:
             reward_shape_rewards = copy.deepcopy(rewards)
@@ -455,6 +488,12 @@ if __name__ == "__main__":
         if args.use_hj and args.reward_hj != 0:
             for idx, og_action in og_actions:
                 rewards[idx] = args.reward_hj
+
+        if args.use_hj and args.cost_for_hj:
+            for idx, og_action in og_actions:
+                info[i]["cost"] = 1
+
+        costs = [info.get("cost", 0) for info in infos]
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         for info in infos:
@@ -522,12 +561,11 @@ if __name__ == "__main__":
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
-
             for idx, env in enumerate(envs.envs):
                 info = infos[idx]
-                # if "safe" in info.keys():
-                #     if not info["safe"]:
-                #         print(f"unsafe state: {env.state}")
+                if "safe" in info.keys():
+                    if not info["safe"]:
+                        print(f"unsafe state: {env.state}")
 
             data = rb.sample(args.batch_size)
             with torch.no_grad():

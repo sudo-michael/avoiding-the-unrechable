@@ -86,7 +86,7 @@ class DubinsCar:
         self.d_max = d_max
         self.u_mode = u_mode
         self.d_mode = d_mode
-        self.r = 0.3
+        self.r = 0.25  # barely touch lava sometimes
 
     def opt_ctrl(self, t, state, spat_deriv):
         opt_w = self.w_max
@@ -97,6 +97,41 @@ class DubinsCar:
             if self.u_mode == "max":
                 opt_w = -opt_w
         return np.array([opt_w])
+
+    def safe_ctrl(self, t, state, spat_deriv, uniform_sample=True):
+        opt_w = self.w_max
+        if spat_deriv[2] > 0:
+            if self.u_mode == "min":
+                opt_w = -opt_w
+        elif spat_deriv[2] < 0:
+            if self.u_mode == "max":
+                opt_w = -opt_w
+        b = (self.speed * np.cos(state[2])) * spat_deriv[0] + (
+            self.speed * np.sin(state[2])
+        ) * spat_deriv[1]
+        # print('gradVdotF: ', b + opt_w * spat_deriv[2])
+        m = spat_deriv[2]
+        x_intercept = -b / (m + 1e-5)
+        if np.sign(m) == 1:
+            w_upper = opt_w
+            w_lower = max(x_intercept, -self.w_max)
+        elif np.sign(m) == -1:
+            w_upper = min(x_intercept, self.w_max)
+            w_lower = -self.w_max
+        else:
+            w_lower = opt_w
+            w_upper = opt_w
+        if uniform_sample:
+            return np.random.uniform(w_lower, w_upper, size=(1,))
+        return np.array([w_lower, w_upper])
+
+    def unsafe_ctrl(self, t, state, spat_deriv, uniform_sample=True):
+        safe_ctrl_bounds = self.safe_ctrl(t, state, spat_deriv, uniform_sample=False)
+        for _ in range(100):
+            ctrl = np.random.uniform(-self.w_max, self.w_max)
+            if not (safe_ctrl_bounds[0] <= ctrl <= safe_ctrl_bounds[1]):
+                break
+        return np.array([ctrl])
 
     def opt_dist(self, t, state, spat_deriv):
         d_opt = np.zeros(3)
@@ -201,7 +236,7 @@ class DubinsHallwayEnv(gym.Env):
             )
 
             if (
-                self.grid.get_value(self.min_brt, self.car.x) > 0.05
+                self.grid.get_value(self.min_brt, self.car.x) > 0.1
             ):  # place car in location that is always possible to avoid obstacle
                 break
 
@@ -210,6 +245,11 @@ class DubinsHallwayEnv(gym.Env):
         return np.array(self.car.x)
 
     def step(self, action: np.array):
+        if isinstance(action, dict):
+            used_hj = action["used_hj"]
+            action = action["action"]
+        else:
+            used_hj = False
         self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
         self.car.x[0] = min(
             max(self.left_wall + self.car.r, self.car.x[0]),
@@ -223,7 +263,8 @@ class DubinsHallwayEnv(gym.Env):
 
         done = False
         info = {}
-        info["cost"] = 0
+        # info["cost"] = 0
+        info["cost"] = used_hj
         info["safe"] = True
         if self.collision_rect_circle(
             self.obstacle_location[0],
@@ -240,6 +281,7 @@ class DubinsHallwayEnv(gym.Env):
             info["safe"] = False
         elif self.near_goal():
             done = True
+            info["reach_goal"] = True
 
         # calculate reward
         reward = -np.linalg.norm(self.car.x[:2] - self.goal_location[:2])
@@ -285,6 +327,7 @@ class DubinsHallwayEnv(gym.Env):
             info["safe"] = False
         elif self.near_goal():
             done = True
+            info["reach_goal"] = True
 
         # calculate reward
         reward = -np.linalg.norm(next_state[:2] - self.goal_location[:2])
@@ -434,11 +477,21 @@ class DubinsHallwayEnv(gym.Env):
         opt_ctrl = self.car.opt_ctrl(0, self.state, spat_deriv)
         return opt_ctrl
 
-    def use_opt_ctrl(self, threshold=0.03, threshold_ra=0.03):
+    def safe_ctrl(self):
+        index = self.grid.get_index(self.state)
+        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        return self.car.safe_ctrl(0, self.state, spat_deriv)
+
+    def use_opt_ctrl(self, threshold=0.2, threshold_ra=0.1):
         if self.use_reach_avoid:
             return self.grid.get_value(self.brt, self.state) > threshold_ra
         else:
             return self.grid.get_value(self.min_brt, self.state) < threshold
+
+    def unsafe_ctrl(self):
+        index = self.grid.get_index(self.state)
+        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        return self.car.unsafe_ctrl(0, self.state, spat_deriv)
 
     @property
     def min_reward(self):
@@ -461,7 +514,7 @@ if __name__ in "__main__":
     obs = env.reset()
     done = False
     while not done:
-        env.render()
+        # env.render()
         # action = env.action_space.sample()
         # if env.use_opt_ctrl():
         action = env.opt_ctrl()
