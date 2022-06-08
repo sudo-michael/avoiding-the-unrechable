@@ -61,6 +61,10 @@ def parse_args():
         help="Use Saute") 
     parser.add_argument("--render", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Render")
+    parser.add_argument("--haco", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Haco")
+    parser.add_argument("--rescale-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="rescale obs to -1 1")
 
     # Algorithm specific arguments
     # parser.add_argument("--env-id", type=str, default="Safe-Pendulum-v1",
@@ -114,7 +118,7 @@ def parse_args():
         help="Reset if unsafe, use min_reward / (1 - dicount facor")
     parser.add_argument("--use-min-reward", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Reset if unsafe, use min_reward")
-    parser.add_argument("--unform_safe_action", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--uniform-safe-action", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="sample action uniformally that are safe")
     parser.add_argument("--imagine-trajectory", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="sample action uniformally that are safe")
@@ -302,6 +306,36 @@ if __name__ == "__main__":
             monitor_gym=True,
             save_code=True,
         )
+
+        # log wandb run id with hyperparamters when doing abilation
+        import csv
+
+        run_id = wandb.run.id
+        args_dict = dict(vars(args))
+        row = {"run_id": wandb.run.id}
+        keep_track_of = [
+            "env_id",
+            "sample_uniform",
+            "reward_hj",
+            "reward_shape",
+            "done_if_unsafe",
+            "use_min_reward",
+            "use_min_reward",
+            "imagine_trajectory",
+            "imagine_unsafe_actions",
+            "use_hj",
+        ]
+        for key in keep_track_of:
+            row[key] = args_dict[key]
+
+        import os.path
+
+        with open(f"data/{args_dict['env_id']}_v0.csv", "a", newline="") as f:
+            writer = csv.DictWriter(f, row.keys())
+            if not os.path.isfile(f"data/{args_dict['env_id']}_v0.csv"):
+                writer.writeheader()
+            writer.writerow(row)
+
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
@@ -346,9 +380,26 @@ if __name__ == "__main__":
     qf2_target = SoftQNetwork(envs).to(device)
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
-    q_optimizer = optim.Adam(
-        list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr
-    )
+
+    if args.haco:
+        q_int_f1 = SoftQNetwork(envs).to(device)
+        q_int_f2 = SoftQNetwork(envs).to(device)
+        q_int_f1_target = SoftQNetwork(envs).to(device)
+        q_int_f2_target = SoftQNetwork(envs).to(device)
+        q_int_f1_target.load_state_dict(q_int_f1.state_dict())
+        q_int_f2_target.load_state_dict(q_int_f2.state_dict())
+        q_optimizer = optim.Adam(
+            list(qf1.parameters())
+            + list(qf2.parameters())
+            + list(q_int_f1.parameters())
+            + list(q_int_f2.parameters()),
+            lr=args.q_lr,
+        )
+    else:
+        q_optimizer = optim.Adam(
+            list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr
+        )
+
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     if args.autotune:
