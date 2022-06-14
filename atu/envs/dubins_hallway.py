@@ -1,3 +1,4 @@
+from turtle import pen
 import gym
 import os
 import pygame
@@ -144,7 +145,7 @@ class DubinsCar:
         elif self.d_mode == "min":
             for i in range(3):
                 if spat_deriv[i] >= 0:
-                    d_opt[i] == self.d_min[i]
+                    d_opt[i] = self.d_min[i]
                 else:
                     d_opt[i] = self.d_max[i]
         return d_opt
@@ -166,6 +167,7 @@ class DubinsHallwayEnv(gym.Env):
         use_reach_avoid=True,
         done_if_unsafe=False,
         use_disturbances=False,
+        penalize_unsafe=False,
         goal_location=np.array([-2, 2.3, 0.5]),
     ) -> None:
         self.car = DubinsCar()
@@ -177,6 +179,7 @@ class DubinsHallwayEnv(gym.Env):
         self.use_reach_avoid = use_reach_avoid
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
+        self.penalize_unsafe = penalize_unsafe
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
@@ -188,10 +191,24 @@ class DubinsHallwayEnv(gym.Env):
             )
         else:
             self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
-            print("using max over min brt")
-            self.brt = np.load(
-                os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
-            )
+            if self.use_disturbances:
+                self.car = DubinsCar(
+                    u_mode="max",
+                    d_mode="min",
+                    d_min=[-0.1, -0.1, -0.1],
+                    d_max=[0.1, 0.1, 0.1],
+                )
+
+            if self.use_disturbances:
+                print("using max over min brt with disturbances")
+                self.brt = np.load(
+                    os.path.join(dir_path, "assets/brts/max_over_min_brt_dist.npy")
+                )
+            else:
+                print("using max over min brt")
+                self.brt = np.load(
+                    os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
+                )
 
         self.min_brt = np.load(
             os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
@@ -250,7 +267,16 @@ class DubinsHallwayEnv(gym.Env):
             action = action["action"]
         else:
             used_hj = False
-        self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
+
+        if self.use_disturbances:
+            # disturbance = np.random.uniform(self.car.d_min, self.car.d_max)
+            self.car.x = (
+                self.car.dynamics(0, self.car.x, action, disturbance=self.opt_dist())
+                * self.dt
+                + self.car.x
+            )
+        else:
+            self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
         self.car.x[0] = min(
             max(self.left_wall + self.car.r, self.car.x[0]),
             self.right_wall - self.car.r,
@@ -260,6 +286,8 @@ class DubinsHallwayEnv(gym.Env):
             self.top_wall - self.car.r,
         )
         self.car.x[2] = self.normalize_angle(self.car.x[2])
+
+        reward = -np.linalg.norm(self.car.x[:2] - self.goal_location[:2])
 
         done = False
         info = {}
@@ -277,23 +305,22 @@ class DubinsHallwayEnv(gym.Env):
         ):
             if self.done_if_unsafe:
                 done = True
+            elif self.penalize_unsafe:
+                reward = self.min_reward
             info["cost"] = 1
             info["safe"] = False
         elif self.near_goal():
             done = True
             info["reach_goal"] = True
 
-        # calculate reward
-        reward = -np.linalg.norm(self.car.x[:2] - self.goal_location[:2])
 
         # cost is based on distance to obstacle
         info["hj_value"] = self.grid.get_value(self.brt, self.car.x)
 
-        next_state = self.car.x
+        self.state = np.copy(self.car.x)
 
-        self.state = self.car.x
 
-        return next_state, reward, done, info
+        return np.copy(self.state), reward, done, info
 
     def simulate_step(self, state: np.array, action: np.array):
         """ assume state is [x, y, theta] """
@@ -476,6 +503,12 @@ class DubinsHallwayEnv(gym.Env):
         spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
         opt_ctrl = self.car.opt_ctrl(0, self.state, spat_deriv)
         return opt_ctrl
+
+    def opt_dist(self):
+        index = self.grid.get_index(self.state)
+        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        opt_dist = self.car.opt_dist(0, self.state, spat_deriv)
+        return opt_dist
 
     def safe_ctrl(self):
         index = self.grid.get_index(self.state)

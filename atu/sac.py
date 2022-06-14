@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from cost_buffer import CostReplayBuffer
+from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
 from scipy.stats import norm
@@ -65,6 +66,12 @@ def parse_args():
         help="Haco")
     parser.add_argument("--rescale-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="rescale obs to -1 1")
+    parser.add_argument("--dist", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Use dist in env")
+    parser.add_argument("--scale-reward", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Scale Reward")
+    parser.add_argument("--cql", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="CQL")
 
     # Algorithm specific arguments
     # parser.add_argument("--env-id", type=str, default="Safe-Pendulum-v1",
@@ -126,8 +133,8 @@ def parse_args():
         help="use unsafe actions")
     parser.add_argument("--cost-for-hj", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="sample action uniformally that are safe")
-    # parser.add_argument("--", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-    #     help="sample action uniformally that are safe")
+    parser.add_argument("--basic", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="basic")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -144,7 +151,11 @@ def make_env(env_id, seed, idx, capture_video, run_name, saute, eval=False):
             )
         elif "Hallway" in env_id:
             env = gym.make(
-                env_id, use_reach_avoid=args.ra, done_if_unsafe=args.done_if_unsafe
+                env_id,
+                use_reach_avoid=args.ra,
+                done_if_unsafe=args.done_if_unsafe,
+                use_disturbances=args.dist,
+                penalize_unsafe=args.basic,
             )
         else:
             env = gym.make(env_id)
@@ -158,6 +169,8 @@ def make_env(env_id, seed, idx, capture_video, run_name, saute, eval=False):
             elif eval:
                 env = gym.wrappers.RecordVideo(env, f"videos/{run_name}/eval")
 
+        if args.scale_reward:
+            env = gym.wrappers.TransformReward(env, lambda r: r / env.min_reward)
         if saute:
             env = SauteWrapper(
                 env,
@@ -388,17 +401,13 @@ if __name__ == "__main__":
         q_int_f2_target = SoftQNetwork(envs).to(device)
         q_int_f1_target.load_state_dict(q_int_f1.state_dict())
         q_int_f2_target.load_state_dict(q_int_f2.state_dict())
-        q_optimizer = optim.Adam(
-            list(qf1.parameters())
-            + list(qf2.parameters())
-            + list(q_int_f1.parameters())
-            + list(q_int_f2.parameters()),
-            lr=args.q_lr,
+        q_int_optimizer = optim.Adam(
+            list(q_int_f1.parameters()) + list(q_int_f2.parameters()), lr=args.q_lr,
         )
-    else:
-        q_optimizer = optim.Adam(
-            list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr
-        )
+
+    q_optimizer = optim.Adam(
+        list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr
+    )
 
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
@@ -421,6 +430,20 @@ if __name__ == "__main__":
     )
 
     rb_near_brt = CostReplayBuffer(
+        args.buffer_size,
+        envs.single_observation_space,
+        envs.single_action_space,
+        device=device,
+    )
+
+    rb_haco = ReplayBuffer(
+        args.buffer_size,
+        envs.single_observation_space,
+        envs.single_action_space,
+        device=device,
+    )
+
+    rb_hj = ReplayBuffer(
         args.buffer_size,
         envs.single_observation_space,
         envs.single_action_space,
@@ -450,7 +473,6 @@ if __name__ == "__main__":
             actions = actions.detach().cpu().numpy()
 
             if args.use_hj:
-
                 # for idx, env in enumerate(envs.envs):
                 #     state = env.state
                 #     opt_ctrl, value = controller.opt_ctrl_value(state)
@@ -534,17 +556,17 @@ if __name__ == "__main__":
             for idx, og_action in og_actions:
                 reward_shape_rewards[idx] = envs.envs[0].min_reward
                 reward_shape_actions[idx] = og_action
-                print(f"replacing: {og_action} with {actions[idx]}")
+                print(f"replaced: {og_action} with {actions[idx]}")
 
         if args.use_hj and args.reward_hj != 0:
             for idx, og_action in og_actions:
                 rewards[idx] = args.reward_hj
 
-        if args.use_hj and args.cost_for_hj:
+        if args.use_hj and (args.cost_for_hj or args.haco):
             for idx, og_action in og_actions:
-                info[i]["cost"] = 1
+                infos[idx]["cost"] = 1
 
-        costs = [info.get("cost", 0) for info in infos]
+        costs = np.array([info.get("cost", 0) for info in infos])
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         for info in infos:
@@ -593,6 +615,16 @@ if __name__ == "__main__":
                 real_next_obs[idx] = infos[idx]["terminal_observation"]
         rb.add(obs, real_next_obs, actions, rewards, costs, dones, infos)
 
+        if args.haco:
+            # replace replaced actions with original actions
+            original_actions = copy.deepcopy(actions)
+            for idx, action in og_actions:
+                original_actions[idx] = action
+            # print("action: ", actions)
+            # print("og actions: ", original_actions)
+            # print(costs)
+            rb_haco.add(obs, real_next_obs, original_actions, costs, dones, infos)
+
         if args.use_hj and near_brt:
             rb_near_brt.add(obs, real_next_obs, actions, rewards, costs, dones, infos)
 
@@ -607,16 +639,32 @@ if __name__ == "__main__":
                 infos,
             )
 
-        # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
+        if args.use_hj and used_hj:
+            rb_hj.add(obs, real_next_obs, actions, rewards, dones, infos)
+
         obs = next_obs
 
-        # ALGO LOGIC: training.
         if global_step > args.learning_starts:
-            for idx, env in enumerate(envs.envs):
-                info = infos[idx]
-                if "safe" in info.keys():
-                    if not info["safe"]:
-                        print(f"unsafe state: {env.state}")
+            if args.haco:
+                data_haco = rb_haco.sample(args.batch_size)
+                with torch.no_grad():
+                    # what (s, a) pairs to use?
+                    # actions ~ pi_theta with I(s, a) determined by used_hj
+                    next_state_actions, next_state_log_pi, _ = actor.get_action(
+                        data_haco.next_observations
+                    )
+                    q_int_f1_next_target = q_int_f1_target(
+                        data_haco.next_observations, next_state_actions
+                    )
+                    q_int_f2_next_target = q_int_f2_target(
+                        data_haco.next_observations, next_state_actions
+                    )
+                    min_q_int_f_next_target = torch.min(
+                        q_int_f1_next_target, q_int_f2_next_target
+                    )
+                    next_q_int_value = data_haco.rewards.flatten() + (
+                        1 - data_haco.dones.flatten()
+                    ) * args.gamma * (min_q_int_f_next_target).view(-1)
 
             data = rb.sample(args.batch_size)
             with torch.no_grad():
@@ -629,14 +677,30 @@ if __name__ == "__main__":
                     torch.min(qf1_next_target, qf2_next_target)
                     - alpha * next_state_log_pi
                 )
+
+                if args.haco:
+                    min_qf_next_target -= min_q_int_f_next_target
+
                 next_q_value = data.rewards.flatten() + (
                     1 - data.dones.flatten()
                 ) * args.gamma * (min_qf_next_target).view(-1)
 
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
+
+            if args.cql:
+                data_hj = rb_hj.sample(args.batch_size)
+                qf1_a_values = qf1(data.observations, data.actions).view(-1)
+                qf1_a_values_hj = qf1(data_hj.observations, data_hj.actions).view(-1)
+                qf2_a_values = qf2(data.observations, data.actions).view(-1)
+                qf2_a_values_hj = qf2(data_hj.observations, data_hj.actions).view(-1)
+
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
+
+            if args.cql:
+                qf1_loss += (qf1_a_values - qf1_a_values_hj).mean()
+                qf2_loss += (qf2_a_values - qf2_a_values_hj).mean()
             qf_loss = (qf1_loss + qf2_loss) / 2
 
             q_optimizer.zero_grad()
@@ -645,6 +709,25 @@ if __name__ == "__main__":
                 list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm
             )
             q_optimizer.step()
+
+            if args.haco:
+                q_int_f1_a_values = q_int_f1(
+                    data_haco.observations, data_haco.actions
+                ).view(-1)
+                q_int_f2_a_values = q_int_f2(
+                    data_haco.observations, data_haco.actions
+                ).view(-1)
+                q_int_f1_loss = F.mse_loss(q_int_f1_a_values, next_q_int_value)
+                q_int_f2_loss = F.mse_loss(q_int_f2_a_values, next_q_int_value)
+                q_int_f_loss = (q_int_f1_loss + q_int_f2_loss) / 2
+
+                q_int_optimizer.zero_grad()
+                q_int_f_loss.backward()
+                nn.utils.clip_grad_norm_(
+                    list(q_int_f1.parameters()) + list(q_int_f2.parameters()),
+                    args.max_grad_norm,
+                )
+                q_int_optimizer.step()
 
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(
@@ -689,6 +772,22 @@ if __name__ == "__main__":
                         args.tau * param.data + (1 - args.tau) * target_param.data
                     )
 
+            if args.haco:
+                # update the target networks
+                if global_step % args.target_network_frequency == 0:
+                    for param, target_param in zip(
+                        q_int_f1.parameters(), q_int_f1_target.parameters()
+                    ):
+                        target_param.data.copy_(
+                            args.tau * param.data + (1 - args.tau) * target_param.data
+                        )
+                    for param, target_param in zip(
+                        q_int_f2.parameters(), q_int_f2_target.parameters()
+                    ):
+                        target_param.data.copy_(
+                            args.tau * param.data + (1 - args.tau) * target_param.data
+                        )
+
             if global_step % 100 == 0:
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
@@ -706,6 +805,22 @@ if __name__ == "__main__":
                 if args.autotune:
                     writer.add_scalar(
                         "losses/alpha_loss", alpha_loss.item(), global_step
+                    )
+
+                if args.haco:
+                    writer.add_scalar(
+                        "losses/qf_int_1_loss", q_int_f1_loss.item(), global_step
+                    )
+                    writer.add_scalar(
+                        "losses/qf_int_2_loss", q_int_f2_loss.item(), global_step
+                    )
+                    writer.add_scalar(
+                        "losses/qf_int__loss", q_int_f_loss.item(), global_step
+                    )
+                    writer.add_scalar(
+                        "losses/q_int_f1_values",
+                        q_int_f1_a_values.mean().item(),
+                        global_step,
                     )
 
     eval_policy(eval_envs, actor, global_step)
