@@ -17,6 +17,7 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
         # safe: boolean := indicate where state is safe or not
         self.total_cost = 0
         self.total_unsafe = 0
+        self.total_reach_goal = 0
         self.episode_count = 0
         self.episode_returns = None
         self.episode_lengths = None
@@ -57,7 +58,10 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
 
         for i in range(len(dones)):
             if dones[i]:
+                self.episode_count += 1
+
                 infos[i] = infos[i].copy()
+                self.total_reach_goal += infos[i].get('reach_goal', False)
                 episode_return = self.episode_returns[i]
                 episode_cost = self.episode_costs[i]
                 episode_unsafe = self.episode_unsafes[i]
@@ -67,6 +71,7 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
                     "l": episode_length,
                     "c": episode_cost,
                     "us": episode_unsafe,
+                    "prg": self.total_reach_goal / self.episode_count,
                     "tc": self.total_cost,
                     "tus": self.total_unsafe,
                     "t": round(time.perf_counter() - self.t0, 6),
@@ -74,7 +79,6 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
                 infos[i]["episode"] = episode_info
                 self.return_queue.append(episode_return)
                 self.length_queue.append(episode_length)
-                self.episode_count += 1
                 self.episode_returns[i] = 0
                 self.episode_costs[i] = 0
                 self.episode_unsafes[i] = 0

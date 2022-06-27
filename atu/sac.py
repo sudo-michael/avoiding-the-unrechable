@@ -20,11 +20,13 @@ from torch.utils.tensorboard import SummaryWriter
 
 from scipy.stats import norm
 
+from atu.safety_critic import learn_safety_critic
+
 # from helper_oc_controller import HelperOCController
 
 
-from wrappers import RecordEpisodeStatisticsWithCost, SauteWrapper
 import atu
+from atu.wrappers import RecordEpisodeStatisticsWithCost, SauteWrapper
 
 # allow pygame to render headless
 
@@ -34,6 +36,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
+    parser.add_argument("--group-name", type=str,
+        help="group name of this experiment")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -48,7 +52,7 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
-    parser.add_argument("--eval-every", type=int, default=10,
+    parser.add_argument("--eval-every", type=int, default=10_000,
         help="Eval")
     parser.add_argument("--lagrange", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use Sac Lagrange") # https://github.com/AlgTUDelft/WCSAC/blob/main/wc_sac/sac/saclag.py
@@ -64,9 +68,11 @@ def parse_args():
         help="Render")
     parser.add_argument("--haco", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Haco")
+    parser.add_argument("--sqrl", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="sqrl")
     parser.add_argument("--rescale-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="rescale obs to -1 1")
-    parser.add_argument("--dist", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Use dist in env")
     parser.add_argument("--scale-reward", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Scale Reward")
@@ -79,10 +85,18 @@ def parse_args():
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
+    parser.add_argument("--total-timesteps-critic", type=int, default=150_000,
+        help="total timesteps of the experiments for training critic")
     parser.add_argument("--buffer-size", type=int, default=int(1e6),
         help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
+    parser.add_argument("--gamma-risk", type=float, default=0.5,
+        help="the discount factor gamma risk")
+    parser.add_argument("--eps-safe", type=float, default=0.3,
+        help="risky")
+    parser.add_argument("--nu", type=float, default=500,
+        help="lag penalty")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
@@ -121,7 +135,7 @@ def parse_args():
         help="bonus for encouraging hj")
     parser.add_argument("--reward-shape", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="pentalty for bad actions")
-    parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Reset if unsafe, use min_reward / (1 - dicount facor")
     parser.add_argument("--use-min-reward", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Reset if unsafe, use min_reward")
@@ -301,10 +315,7 @@ def eval_policy(envs, actor, global_step):
 
 if __name__ == "__main__":
     args = parse_args()
-    if not args.render:
-        import os
 
-        os.environ["SDL_VIDEODRIVER"] = "dummy"
 
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
@@ -318,6 +329,7 @@ if __name__ == "__main__":
             name=run_name,
             monitor_gym=True,
             save_code=True,
+            group=args.group_name,
         )
 
         # log wandb run id with hyperparamters when doing abilation
@@ -394,15 +406,16 @@ if __name__ == "__main__":
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
 
-    if args.haco:
-        q_int_f1 = SoftQNetwork(envs).to(device)
-        q_int_f2 = SoftQNetwork(envs).to(device)
-        q_int_f1_target = SoftQNetwork(envs).to(device)
-        q_int_f2_target = SoftQNetwork(envs).to(device)
-        q_int_f1_target.load_state_dict(q_int_f1.state_dict())
-        q_int_f2_target.load_state_dict(q_int_f2.state_dict())
-        q_int_optimizer = optim.Adam(
-            list(q_int_f1.parameters()) + list(q_int_f2.parameters()), lr=args.q_lr,
+    if args.haco or args.sqrl:
+        q_critic_f1 = SoftQNetwork(envs).to(device)
+        q_critic_f2 = SoftQNetwork(envs).to(device)
+        q_critic_f1_target = SoftQNetwork(envs).to(device)
+        q_critic_f2_target = SoftQNetwork(envs).to(device)
+        q_critic_f1_target.load_state_dict(q_critic_f1.state_dict())
+        q_critic_f2_target.load_state_dict(q_critic_f2.state_dict())
+        q_critic_optimizer = optim.Adam(
+            list(q_critic_f1.parameters()) + list(q_critic_f2.parameters()),
+            lr=args.q_lr,
         )
 
     q_optimizer = optim.Adam(
@@ -420,6 +433,11 @@ if __name__ == "__main__":
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
     else:
         alpha = args.alpha
+
+    if args.sqrl:
+        log_nu = torch.tensor(np.log(args.nu), requires_grad=True, device=device)
+        nu = log_nu.exp().item()
+        nu_optim = optim.Adam([log_nu], lr=0.1 * args.policy_lr)
 
     envs.single_observation_space.dtype = np.float32
     rb = CostReplayBuffer(
@@ -449,13 +467,36 @@ if __name__ == "__main__":
         envs.single_action_space,
         device=device,
     )
+
     start_time = time.time()
+
+    if args.sqrl:
+        safety_actor, safety_critic = learn_safety_critic(
+            args,
+            run_name,
+            writer,
+            load_actor=f"models/actor_{args.total_timesteps_critic}.pth",
+            load_critic=f"models/critic_{args.total_timesteps_critic}.pth",
+        )
+        # torch.save(
+        #     safety_actor.state_dict(), f"models/actor_{args.total_timesteps_critic}.pth"
+        # )
+        # torch.save(
+        #     safety_critic.state_dict(),
+        #     f"models/critic_{args.total_timesteps_critic}.pth",
+        # )
+        # exit()
+        q_critic_f1.load_state_dict(safety_critic.state_dict())
+        q_critic_f2.load_state_dict(safety_critic.state_dict())
+        q_critic_f1_target.load_state_dict(safety_critic.state_dict())
+        q_critic_f2_target.load_state_dict(safety_critic.state_dict())
 
     # TRY NOT TO MODIFY: start the game
     obs = envs.reset()
 
     unsafe_counter = 0
     hj_use_counter = 0
+    total_reach_goal = 0
 
     for global_step in range(args.total_timesteps):
         if args.render:
@@ -468,6 +509,20 @@ if __name__ == "__main__":
             actions = np.array(
                 [envs.single_action_space.sample() for _ in range(envs.num_envs)]
             )
+        elif args.sqrl:
+            tmp_obs = torch.Tensor(obs).to(device)
+            safest_action_eps = args.eps_safe
+            actions, _, _ = actor.get_action(tmp_obs)
+            actions = actions.detach().cpu().numpy()
+            with torch.no_grad():
+                for _ in range(100):
+                    new_actions, _, _ = actor.get_action(tmp_obs)
+                    q_critic_f1_pi = q_critic_f1(tmp_obs, new_actions)
+                    q_critic_f2_pi = q_critic_f2(tmp_obs, new_actions)
+                    max_q_critic_pi = torch.max(q_critic_f1_pi, q_critic_f2_pi)
+                    if max_q_critic_pi.item() < safest_action_eps:
+                        safest_action_eps = max_q_critic_pi.item()
+                        actions = new_actions.detach().cpu().numpy()
         else:
             actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
             actions = actions.detach().cpu().numpy()
@@ -550,13 +605,16 @@ if __name__ == "__main__":
             [{"action": actions, "used_hj": used_hj}]
         )
 
+        # if infos[0]["hj_value"] < 0:
+        #     breakpoint()
+
         if args.reward_shape:
             reward_shape_rewards = copy.deepcopy(rewards)
             reward_shape_actions = copy.deepcopy(actions)
             for idx, og_action in og_actions:
                 reward_shape_rewards[idx] = envs.envs[0].min_reward
                 reward_shape_actions[idx] = og_action
-                print(f"replaced: {og_action} with {actions[idx]}")
+                # print(f"replaced: {og_action} with {actions[idx]}")
 
         if args.use_hj and args.reward_hj != 0:
             for idx, og_action in og_actions:
@@ -575,6 +633,7 @@ if __name__ == "__main__":
                 writer.add_scalar("sanity/unsafe_counter", unsafe_counter, global_step)
 
             if "episode" in info.keys():
+                total_reach_goal += info.get("reach_goal", 0)
                 print(
                     f"global_step={global_step}, episodic_return={info['episode']['r']} episodic_cost={info['episode']['c']} unsafe={info['episode']['us']}"
                 )
@@ -596,17 +655,21 @@ if __name__ == "__main__":
                     "charts/total_unsafe", info["episode"]["tus"], global_step
                 )
 
-                if envs.envs[0].episode_count % args.eval_every == 0:
-                    eval_policy(eval_envs, actor, global_step)
-                break
+                writer.add_scalar(
+                    "charts/total_unsafe", info["episode"]["tus"], global_step
+                )
 
-        if args.done_if_unsafe:
-            for idx, info in enumerate(infos):
-                if not info["safe"]:
-                    if args.use_min_reward:
-                        rewards[idx] = envs.envs.min_reward
-                    else:
-                        rewards[idx] = envs.envs.min_reward / (1 - args.gamma)
+                writer.add_scalar(
+                    "charts/total_reach_goal", total_reach_goal, global_step
+                )
+
+        # if args.done_if_unsafe:
+        #     for idx, info in enumerate(infos):
+        #         if not info["safe"]:
+        #             if args.use_min_reward:
+        #                 rewards[idx] = envs.envs.min_reward
+        #             else:
+        #                 rewards[idx] = envs.envs.min_reward / (1 - args.gamma)
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
         real_next_obs = next_obs.copy()
@@ -653,14 +716,14 @@ if __name__ == "__main__":
                     next_state_actions, next_state_log_pi, _ = actor.get_action(
                         data_haco.next_observations
                     )
-                    q_int_f1_next_target = q_int_f1_target(
+                    q_critic_f1_next_target = q_critic_f1_target(
                         data_haco.next_observations, next_state_actions
                     )
-                    q_int_f2_next_target = q_int_f2_target(
+                    q_critic_f2_next_target = q_critic_f2_target(
                         data_haco.next_observations, next_state_actions
                     )
                     min_q_int_f_next_target = torch.min(
-                        q_int_f1_next_target, q_int_f2_next_target
+                        q_critic_f1_next_target, q_critic_f2_next_target
                     )
                     next_q_int_value = data_haco.rewards.flatten() + (
                         1 - data_haco.dones.flatten()
@@ -699,8 +762,8 @@ if __name__ == "__main__":
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
 
             if args.cql:
-                qf1_loss += (qf1_a_values - qf1_a_values_hj).mean()
-                qf2_loss += (qf2_a_values - qf2_a_values_hj).mean()
+                qf1_loss = qf1_loss + (qf1_a_values - qf1_a_values_hj).mean()
+                qf2_loss = qf2_loss + (qf2_a_values - qf2_a_values_hj).mean()
             qf_loss = (qf1_loss + qf2_loss) / 2
 
             q_optimizer.zero_grad()
@@ -711,23 +774,23 @@ if __name__ == "__main__":
             q_optimizer.step()
 
             if args.haco:
-                q_int_f1_a_values = q_int_f1(
+                q_critic_f1_a_values = q_critic_f1(
                     data_haco.observations, data_haco.actions
                 ).view(-1)
-                q_int_f2_a_values = q_int_f2(
+                q_critic_f2_a_values = q_critic_f2(
                     data_haco.observations, data_haco.actions
                 ).view(-1)
-                q_int_f1_loss = F.mse_loss(q_int_f1_a_values, next_q_int_value)
-                q_int_f2_loss = F.mse_loss(q_int_f2_a_values, next_q_int_value)
-                q_int_f_loss = (q_int_f1_loss + q_int_f2_loss) / 2
+                q_critic_f1_loss = F.mse_loss(q_critic_f1_a_values, next_q_int_value)
+                q_critic_f2_loss = F.mse_loss(q_critic_f2_a_values, next_q_int_value)
+                q_int_f_loss = (q_critic_f1_loss + q_critic_f2_loss) / 2
 
-                q_int_optimizer.zero_grad()
+                q_critic_optimizer.zero_grad()
                 q_int_f_loss.backward()
                 nn.utils.clip_grad_norm_(
-                    list(q_int_f1.parameters()) + list(q_int_f2.parameters()),
+                    list(q_critic_f1.parameters()) + list(q_critic_f2.parameters()),
                     args.max_grad_norm,
                 )
-                q_int_optimizer.step()
+                q_critic_optimizer.step()
 
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(
@@ -738,7 +801,20 @@ if __name__ == "__main__":
                     qf2_pi = qf2(data.observations, pi)
                     min_qf_pi = torch.min(qf1_pi, qf2_pi).view(-1)
 
-                    actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
+                    if args.sqrl:
+                        q_critic_f1_pi = q_critic_f1(data.observations, pi)
+                        q_critic_f2_pi = q_critic_f2(data.observations, pi)
+                        max_q_critic_pi = torch.max(
+                            q_critic_f1_pi, q_critic_f2_pi
+                        ).view(-1)
+
+                        actor_loss = (
+                            (alpha * log_pi)
+                            - min_qf_pi
+                            + nu * (max_q_critic_pi - args.eps_safe)
+                        ).mean()
+                    else:
+                        actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
 
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
@@ -756,6 +832,21 @@ if __name__ == "__main__":
                         alpha_loss.backward()
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
+
+                    if args.sqrl:
+                        with torch.no_grad():
+                            pi, log_pi, _ = actor.get_action(data.observations)
+                            q_critic_f1_pi = q_critic_f1(data.observations, pi)
+                            q_critic_f2_pi = q_critic_f2(data.observations, pi)
+                            max_q_critic_pi = torch.max(
+                                q_critic_f1_pi, q_critic_f2_pi
+                            ).view(-1)
+
+                        nu_loss = (log_nu * (args.eps_safe - max_q_critic_pi)).mean()
+                        nu_optim.zero_grad()
+                        nu_loss.backward()
+                        nu_optim.step()
+                        nu = log_nu.exp().item()
 
             # update the target networks
             if global_step % args.target_network_frequency == 0:
@@ -776,13 +867,13 @@ if __name__ == "__main__":
                 # update the target networks
                 if global_step % args.target_network_frequency == 0:
                     for param, target_param in zip(
-                        q_int_f1.parameters(), q_int_f1_target.parameters()
+                        q_critic_f1.parameters(), q_critic_f1_target.parameters()
                     ):
                         target_param.data.copy_(
                             args.tau * param.data + (1 - args.tau) * target_param.data
                         )
                     for param, target_param in zip(
-                        q_int_f2.parameters(), q_int_f2_target.parameters()
+                        q_critic_f2.parameters(), q_critic_f2_target.parameters()
                     ):
                         target_param.data.copy_(
                             args.tau * param.data + (1 - args.tau) * target_param.data
@@ -809,19 +900,26 @@ if __name__ == "__main__":
 
                 if args.haco:
                     writer.add_scalar(
-                        "losses/qf_int_1_loss", q_int_f1_loss.item(), global_step
+                        "losses/qf_int_1_loss", q_critic_f1_loss.item(), global_step
                     )
                     writer.add_scalar(
-                        "losses/qf_int_2_loss", q_int_f2_loss.item(), global_step
+                        "losses/qf_int_2_loss", q_critic_f2_loss.item(), global_step
                     )
                     writer.add_scalar(
                         "losses/qf_int__loss", q_int_f_loss.item(), global_step
                     )
                     writer.add_scalar(
-                        "losses/q_int_f1_values",
-                        q_int_f1_a_values.mean().item(),
+                        "losses/q_critic_f1_values",
+                        q_critic_f1_a_values.mean().item(),
                         global_step,
                     )
+
+                if args.sqrl:
+                    writer.add_scalar("losses/nu_loss", nu_loss.item(), global_step)
+                    writer.add_scalar("losses/nu", nu, global_step)
+
+        if (global_step + 1) % args.eval_every == 0:
+            eval_policy(eval_envs, actor, global_step)
 
     eval_policy(eval_envs, actor, global_step)
     envs.close()

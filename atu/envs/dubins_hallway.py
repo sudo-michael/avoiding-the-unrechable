@@ -154,7 +154,6 @@ class DubinsCar:
         x_dot = self.speed * np.cos(state[2]) + disturbance[0]
         y_dot = self.speed * np.sin(state[2]) + disturbance[1]
         theta_dot = u_opt[0] + disturbance[2]
-
         return np.array([x_dot, y_dot, theta_dot], dtype=np.float32)
 
 
@@ -164,9 +163,9 @@ class DubinsHallwayEnv(gym.Env):
 
     def __init__(
         self,
-        use_reach_avoid=True,
-        done_if_unsafe=False,
-        use_disturbances=False,
+        use_reach_avoid=False,
+        done_if_unsafe=True,
+        use_disturbances=True,
         penalize_unsafe=False,
         goal_location=np.array([-2, 2.3, 0.5]),
     ) -> None:
@@ -202,7 +201,7 @@ class DubinsHallwayEnv(gym.Env):
             if self.use_disturbances:
                 print("using max over min brt with disturbances")
                 self.brt = np.load(
-                    os.path.join(dir_path, "assets/brts/max_over_min_brt_dist.npy")
+                    os.path.join(dir_path, "assets/brts/max_over_min_brt_dist_025.npy")
                 )
             else:
                 print("using max over min brt")
@@ -210,9 +209,7 @@ class DubinsHallwayEnv(gym.Env):
                     os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
                 )
 
-        self.min_brt = np.load(
-            os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
-        )
+        self.min_brt = np.load(os.path.join(dir_path, "assets/brts/min_brt_dist.npy"))
 
         self.state = None
         self.dt = 0.05
@@ -243,22 +240,26 @@ class DubinsHallwayEnv(gym.Env):
 
         self.grid = grid
 
+        self.hist = []
+
     def reset(self, seed=None):
+        self.hist.clear()
         self.use_hj = False
         while True:
             self.car.x = np.random.uniform(
+                # low=-self.world_boundary,
+                # high=self.world_boundary
                 low=-self.world_boundary,
-                high=self.world_boundary
-                # low=-self.world_boundary, high=np.array([4.5, -0.5, np.pi]) # reset in bottom half of map
+                high=np.array([0.0, -0.5, np.pi]),  # reset in bottom left-half of map
             )
 
             if (
-                self.grid.get_value(self.min_brt, self.car.x) > 0.1
+                self.grid.get_value(self.min_brt, self.car.x) > 0.2
             ):  # place car in location that is always possible to avoid obstacle
                 break
 
         self.state = self.car.x
-        print(f"intial state: {self.state}")
+        self.hist.append(np.copy(self.state))
         return np.array(self.car.x)
 
     def step(self, action: np.array):
@@ -268,8 +269,9 @@ class DubinsHallwayEnv(gym.Env):
         else:
             used_hj = False
 
+        action = action.reshape((1,))
+
         if self.use_disturbances:
-            # disturbance = np.random.uniform(self.car.d_min, self.car.d_max)
             self.car.x = (
                 self.car.dynamics(0, self.car.x, action, disturbance=self.opt_dist())
                 * self.dt
@@ -303,22 +305,33 @@ class DubinsHallwayEnv(gym.Env):
             self.car.x[1],
             self.car.r,
         ):
+            print("hit car")
+            print(self.hist)
+            import pickle
+            import sys
+
+            with open(r"car_crash.pickle", "wb") as f:
+                pickle.dump(self.hist, f)
+                print("dump done")
+
+            sys.exit()
             if self.done_if_unsafe:
                 done = True
             elif self.penalize_unsafe:
-                reward = self.min_reward
+                reward = self.min_reward * 2
             info["cost"] = 1
             info["safe"] = False
         elif self.near_goal():
             done = True
+            reward = 100.0
             info["reach_goal"] = True
-
 
         # cost is based on distance to obstacle
         info["hj_value"] = self.grid.get_value(self.brt, self.car.x)
 
         self.state = np.copy(self.car.x)
 
+        self.hist.append(np.copy(self.state))
 
         return np.copy(self.state), reward, done, info
 
@@ -519,7 +532,7 @@ class DubinsHallwayEnv(gym.Env):
         if self.use_reach_avoid:
             return self.grid.get_value(self.brt, self.state) > threshold_ra
         else:
-            return self.grid.get_value(self.min_brt, self.state) < threshold
+            return self.grid.get_value(self.brt, self.state) < threshold
 
     def unsafe_ctrl(self):
         index = self.grid.get_index(self.state)
@@ -541,7 +554,7 @@ if __name__ in "__main__":
     from gym.wrappers import TransformObservation
     import gym
 
-    env = gym.make("Safe-DubinsHallway-v1", use_reach_avoid=True)
+    env = gym.make("Safe-DubinsHallway-v1", use_reach_avoid=False)
     env = TransformObservation(env, lambda obs: obs / env.world_boundary)
     env = RecordEpisodeStatisticsWithCost(env)
     obs = env.reset()

@@ -1,0 +1,4 @@
+run_id,env_id,sample_uniform,reward_hj,reward_shape,done_if_unsafe,use_min_reward,imagine_trajectory,imagine_unsafe_actions,use_hj
+ec8c72ng,Safe-DubinsHallway-v1,False,0,False,False,False,False,0,True
+run_id,env_id,sample_uniform,reward_hj,reward_shape,done_if_unsafe,use_min_reward,imagine_trajectory,imagine_unsafe_actions,use_hj
+1wgoecd5,Safe-DubinsHallway-v1,False,0,False,False,False,False,0,True
