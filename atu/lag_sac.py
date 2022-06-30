@@ -41,6 +41,12 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--eval-every", type=int, default=20_000,
+        help="Eval")
+    parser.add_argument("--dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="Use dist in env")
+    parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="Reset if unsafe")
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
@@ -57,7 +63,7 @@ def parse_args():
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
         help="the scale of exploration noise")
-    parser.add_argument("--learning-starts", type=int, default=5e3,
+    parser.add_argument("--learning-starts", type=int, default=0,
         help="timestep to start learning")
     parser.add_argument("--policy-lr", type=float, default=3e-4,
         help="the learning rate of the policy network optimizer")
@@ -83,7 +89,7 @@ def parse_args():
     return args
 
 
-def make_env(env_id, seed, idx, capture_video, run_name):
+def make_env(env_id, seed, idx, capture_video, run_name, saute, eval=False):
     def thunk():
         env = gym.make(env_id, done_if_unsafe=True, use_disturbances=True)
         env = RecordEpisodeStatisticsWithCost(env)
@@ -202,8 +208,77 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed, 0, args.capture_video, run_name)]
+        [
+            make_env(
+                args.env_id,
+                args.seed,
+                0,
+                args.capture_video,
+                run_name,
+                saute=False,
+                eval=False,
+            )
+        ]
     )
+
+    eval_envs = gym.vector.SyncVectorEnv(
+        [
+            make_env(
+                args.env_id,
+                args.seed + 1_000,
+                1,
+                args.capture_video,
+                run_name,
+                saute=False,
+                eval=True,
+            )
+        ]
+    )
+
+    def eval_policy(envs, actor, global_step):
+        print("eval policy")
+        actor.eval()
+        total_episodic_return = 0
+        total_episodic_cost = 0
+        total_episodic_unsafe = 0
+        total_reach_goal = 0
+        EPISODES = 10
+        for episode in range(EPISODES):
+            obs = envs.reset()
+            done = False
+            while not done:
+                with torch.no_grad():
+                    actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
+                actions = actions.cpu().numpy()
+
+                next_obs, rewards, dones, infos = envs.step(actions)
+                costs = [not info["safe"] for info in infos]
+
+                obs = next_obs
+                # TRY NOT TO MODIFY: record rewards for plotting purposes
+                for info in infos:
+                    if "episode" in info.keys():
+                        total_episodic_return += info["episode"]["r"]
+                        total_episodic_cost += info["episode"]["c"]
+                        total_episodic_unsafe += info["episode"]["us"]
+                        total_reach_goal += info.get("reach_goal", False)
+                        done = True
+                        break
+
+        writer.add_scalar("eval/return", total_episodic_return / EPISODES, global_step)
+        writer.add_scalar(
+            "eval/total_unsafe", total_episodic_unsafe / EPISODES, global_step
+        )
+        writer.add_scalar(
+            "eval/total_cost", total_episodic_cost / EPISODES, global_step
+        )
+        writer.add_scalar("eval/reach_goal", total_reach_goal / EPISODES, global_step)
+        print(
+            f"eval: average return: {total_episodic_return / EPISODES} average cost: {total_episodic_cost / EPISODES} average unsafe = {total_episodic_unsafe / EPISODES} average reach goal = {total_reach_goal / EPISODES}"
+        )
+
+        actor.train()
+
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
@@ -461,6 +536,9 @@ if __name__ == "__main__":
                 writer.add_scalar(
                     "losses/lambda_loss", lambda_multiplier_loss.item(), global_step
                 )
+
+        if (global_step + 1) % args.eval_every == 0:
+            eval_policy(eval_envs, actor, global_step)
 
     envs.close()
     writer.close()

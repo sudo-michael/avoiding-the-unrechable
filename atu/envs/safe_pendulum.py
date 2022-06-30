@@ -371,8 +371,8 @@ if __name__ in "__main__":
     env = gym.make("Safe-Pendulum-v1")
     obs = env.reset()
     for _ in range(100):
-        env.step(env.action_space.sample())
         env.render()
+        env.step(env.action_space.sample())
         time.sleep(0.05)
 
     print(env.state)

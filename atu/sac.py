@@ -1,12 +1,16 @@
 # from https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/sac_continuous_action.py
+
+# allow pygame to render headless
+import os
+
+os.environ["SDL_VIDEODRIVER"] = "dummy"
+
 import argparse
-import enum
 import os
 import copy
 import random
 import time
 from distutils.util import strtobool
-from tkinter.tix import Tree
 
 import gym
 import numpy as np
@@ -27,8 +31,6 @@ from atu.safety_critic import learn_safety_critic
 
 import atu
 from atu.wrappers import RecordEpisodeStatisticsWithCost, SauteWrapper
-
-# allow pygame to render headless
 
 
 def parse_args():
@@ -52,7 +54,7 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
-    parser.add_argument("--eval-every", type=int, default=10_000,
+    parser.add_argument("--eval-every", type=int, default=20_000,
         help="Eval")
     parser.add_argument("--lagrange", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use Sac Lagrange") # https://github.com/AlgTUDelft/WCSAC/blob/main/wc_sac/sac/saclag.py
@@ -179,7 +181,11 @@ def make_env(env_id, seed, idx, capture_video, run_name, saute, eval=False):
         )
         if capture_video:
             if idx == 0:
-                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+                env = gym.wrappers.RecordVideo(
+                    # env, f"videos/{run_name}", episode_trigger=lambda x: True
+                    env,
+                    f"videos/{run_name}",
+                )
             elif eval:
                 env = gym.wrappers.RecordVideo(env, f"videos/{run_name}/eval")
 
@@ -315,7 +321,6 @@ def eval_policy(envs, actor, global_step):
 
 if __name__ == "__main__":
     args = parse_args()
-
 
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
@@ -499,7 +504,7 @@ if __name__ == "__main__":
     total_reach_goal = 0
 
     for global_step in range(args.total_timesteps):
-        if args.render:
+        if not args.render:
             envs.envs[0].render()
 
         used_hj = False

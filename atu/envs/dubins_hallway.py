@@ -4,7 +4,7 @@ import os
 import pygame
 from gym.spaces import Box
 from atu.optimized_dp.Grid.GridProcessing import Grid
-from atu.optimized_dp.dubin_hallway import g as grid
+from atu.optimized_dp.brt_dubin_hallway import g as grid
 import numpy as np
 import math
 
@@ -87,7 +87,7 @@ class DubinsCar:
         self.d_max = d_max
         self.u_mode = u_mode
         self.d_mode = d_mode
-        self.r = 0.25  # barely touch lava sometimes
+        self.r = 0.2  # barely touch lava sometimes
 
     def opt_ctrl(self, t, state, spat_deriv):
         opt_w = self.w_max
@@ -201,7 +201,7 @@ class DubinsHallwayEnv(gym.Env):
             if self.use_disturbances:
                 print("using max over min brt with disturbances")
                 self.brt = np.load(
-                    os.path.join(dir_path, "assets/brts/max_over_min_brt_dist_025.npy")
+                    os.path.join(dir_path, "assets/brts/max_over_min_brt_dist_035.npy")
                 )
             else:
                 print("using max over min brt")
@@ -240,10 +240,10 @@ class DubinsHallwayEnv(gym.Env):
 
         self.grid = grid
 
-        self.hist = []
+        # self.hist = []
 
     def reset(self, seed=None):
-        self.hist.clear()
+        # self.hist.clear()
         self.use_hj = False
         while True:
             self.car.x = np.random.uniform(
@@ -258,8 +258,9 @@ class DubinsHallwayEnv(gym.Env):
             ):  # place car in location that is always possible to avoid obstacle
                 break
 
+        self.car.x = np.array(self.car.x, dtype=np.float32)
         self.state = self.car.x
-        self.hist.append(np.copy(self.state))
+        # self.hist.append(np.copy(self.state))
         return np.array(self.car.x)
 
     def step(self, action: np.array):
@@ -279,17 +280,18 @@ class DubinsHallwayEnv(gym.Env):
             )
         else:
             self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
-        self.car.x[0] = min(
-            max(self.left_wall + self.car.r, self.car.x[0]),
-            self.right_wall - self.car.r,
-        )
-        self.car.x[1] = min(
-            max(self.bottom_wall + self.car.r, self.car.x[1]),
-            self.top_wall - self.car.r,
-        )
+        # self.car.x[0] = min(
+        #     max(self.left_wall + self.car.r, self.car.x[0]),
+        #     self.right_wall - self.car.r,
+        # )
+        # self.car.x[1] = min(
+        #     max(self.bottom_wall + self.car.r, self.car.x[1]),
+        #     self.top_wall - self.car.r,
+        # )
         self.car.x[2] = self.normalize_angle(self.car.x[2])
 
         reward = -np.linalg.norm(self.car.x[:2] - self.goal_location[:2])
+
 
         done = False
         info = {}
@@ -305,20 +307,28 @@ class DubinsHallwayEnv(gym.Env):
             self.car.x[1],
             self.car.r,
         ):
-            print("hit car")
-            print(self.hist)
+            # print("hit car")
+            # print(self.hist)
             import pickle
             import sys
 
-            with open(r"car_crash.pickle", "wb") as f:
-                pickle.dump(self.hist, f)
-                print("dump done")
+            # with open(r"car_crash.pickle", "wb") as f:
+            #     pickle.dump(self.hist, f)
+            #     print("dump done")
 
-            sys.exit()
+            # sys.exit()
             if self.done_if_unsafe:
                 done = True
             elif self.penalize_unsafe:
                 reward = self.min_reward * 2
+            info["cost"] = 1
+            info["safe"] = False
+        elif not (self.left_wall + self.car.r <= self.car.x[0] <= self.right_wall - self.car.r):
+            done = True
+            info["cost"] = 1
+            info["safe"] = False
+        elif not (self.bottom_wall + self.car.r <= self.car.x[1] <= self.top_wall - self.car.r):
+            done = True
             info["cost"] = 1
             info["safe"] = False
         elif self.near_goal():
@@ -331,7 +341,7 @@ class DubinsHallwayEnv(gym.Env):
 
         self.state = np.copy(self.car.x)
 
-        self.hist.append(np.copy(self.state))
+        # self.hist.append(np.copy(self.state))
 
         return np.copy(self.state), reward, done, info
 
@@ -560,7 +570,7 @@ if __name__ in "__main__":
     obs = env.reset()
     done = False
     while not done:
-        # env.render()
+        env.render()
         # action = env.action_space.sample()
         # if env.use_opt_ctrl():
         action = env.opt_ctrl()
