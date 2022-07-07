@@ -8,6 +8,9 @@ from atu.optimized_dp.brt_dubin_hallway import g as grid
 import numpy as np
 import math
 
+import matplotlib
+import matplotlib.pyplot as plt
+
 
 def spa_deriv(index, V, g, periodic_dims=[]):
     """
@@ -73,12 +76,12 @@ class DubinsCar:
     def __init__(
         self,
         x_0=np.array([0, 0, 0]),
-        w_max=1,
+        w_max=1.5,
         speed=1,
         d_min=[0, 0, 0],
         d_max=[0, 0, 0],
-        u_mode="min",
-        d_mode="max",
+        u_mode="max",
+        d_mode="min",
     ):
         self.x = x_0
         self.w_max = w_max  # turn rate
@@ -90,13 +93,18 @@ class DubinsCar:
         self.r = 0.2  # barely touch lava sometimes
 
     def opt_ctrl(self, t, state, spat_deriv):
-        opt_w = self.w_max
-        if spat_deriv[2] > 0:
-            if self.u_mode == "min":
-                opt_w = -opt_w
-        elif spat_deriv[2] < 0:
+        opt_w = None
+        if spat_deriv[2] >= 0:
             if self.u_mode == "max":
-                opt_w = -opt_w
+                opt_w = self.w_max
+            else:
+                opt_w = -self.w_max
+        elif spat_deriv[2] <= 0:
+            if self.u_mode == "max":
+                opt_w = -self.w_max
+            else:
+                opt_w = self.w_max
+
         return np.array([opt_w])
 
     def safe_ctrl(self, t, state, spat_deriv, uniform_sample=True):
@@ -191,6 +199,7 @@ class DubinsHallwayEnv(gym.Env):
         else:
             self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
             if self.use_disturbances:
+                print("use dist")
                 self.car = DubinsCar(
                     u_mode="max",
                     d_mode="min",
@@ -201,13 +210,16 @@ class DubinsHallwayEnv(gym.Env):
             if self.use_disturbances:
                 print("using max over min brt with disturbances")
                 self.brt = np.load(
-                    os.path.join(dir_path, "assets/brts/max_over_min_brt_dist_035.npy")
+                    # os.path.join(dir_path, "assets/brts/max_over_min_brt_dist_035.npy")
+                    # os.path.join(dir_path, "assets/brts/min_brt_dist.npy")
+                    os.path.join(dir_path, "assets/brts/min_brt_dist.npy")
                 )
             else:
-                print("using max over min brt")
-                self.brt = np.load(
-                    os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
-                )
+                print("no dist")
+                # self.brt = np.load(
+                #     os.path.join(dir_path, "assets/brts/min_brt_dist.npy")
+                # )
+                self.brt = np.load(os.path.join(dir_path, "assets/brts/min_brt.npy"))
 
         self.min_brt = np.load(os.path.join(dir_path, "assets/brts/min_brt_dist.npy"))
 
@@ -242,6 +254,8 @@ class DubinsHallwayEnv(gym.Env):
 
         # self.hist = []
 
+        self.fig, self.ax = plt.subplots(figsize=(5, 5))
+
     def reset(self, seed=None):
         # self.hist.clear()
         self.use_hj = False
@@ -258,6 +272,9 @@ class DubinsHallwayEnv(gym.Env):
             ):  # place car in location that is always possible to avoid obstacle
                 break
 
+        self.car.x = np.array([-3.5, -2, -np.pi])
+        # self.car.x = np.array([-1.1, 2.6, 0.4])
+        # self.car.x = np.array([-2, -3, 0])
         self.car.x = np.array(self.car.x, dtype=np.float32)
         self.state = self.car.x
         # self.hist.append(np.copy(self.state))
@@ -290,8 +307,10 @@ class DubinsHallwayEnv(gym.Env):
         # )
         self.car.x[2] = self.normalize_angle(self.car.x[2])
 
-        reward = -np.linalg.norm(self.car.x[:2] - self.goal_location[:2])
+        self.state = np.copy(self.car.x)
+        print(f"{self.state=}")
 
+        reward = -np.linalg.norm(self.state[:2] - self.goal_location[:2])
 
         done = False
         info = {}
@@ -323,11 +342,15 @@ class DubinsHallwayEnv(gym.Env):
                 reward = self.min_reward * 2
             info["cost"] = 1
             info["safe"] = False
-        elif not (self.left_wall + self.car.r <= self.car.x[0] <= self.right_wall - self.car.r):
+        elif not (
+            self.left_wall + self.car.r <= self.car.x[0] <= self.right_wall - self.car.r
+        ):
             done = True
             info["cost"] = 1
             info["safe"] = False
-        elif not (self.bottom_wall + self.car.r <= self.car.x[1] <= self.top_wall - self.car.r):
+        elif not (
+            self.bottom_wall + self.car.r <= self.car.x[1] <= self.top_wall - self.car.r
+        ):
             done = True
             info["cost"] = 1
             info["safe"] = False
@@ -337,9 +360,9 @@ class DubinsHallwayEnv(gym.Env):
             info["reach_goal"] = True
 
         # cost is based on distance to obstacle
-        info["hj_value"] = self.grid.get_value(self.brt, self.car.x)
-
-        self.state = np.copy(self.car.x)
+        info["hj_value"] = self.grid.get_value(self.brt, self.state)
+        if info["hj_value"] < 0:
+            print(f"er: {self.state}")
 
         # self.hist.append(np.copy(self.state))
 
@@ -388,99 +411,67 @@ class DubinsHallwayEnv(gym.Env):
         return next_state, reward, done, info
 
     def render(self, mode="human"):
-        try:
-            import pygame
-            from pygame import gfxdraw
-        except ImportError:
-            raise gym.DependencyNotInstalled(
-                "pygame is not installed, run `pip install gym[classic_control]`"
-            )
+        self.ax.clear()
+        robot = plt.Circle(self.state[:2], radius=self.car.r, color="blue")
+        self.ax.add_patch(robot)
 
-        screen_width = 600
-        screen_height = 600
-
-        world_to_screen = lambda x: int(x * screen_height / self.world_height)
-
-        def ww2sw(x):
-            """world width to screen width"""
-            return int(x * (screen_width / self.world_width) + screen_width // 2)
-
-        def wh2sh(y):
-            """world height to screen height"""
-            return int(y * (screen_height / self.world_height) + screen_height // 2)
-
-        if not self.screen:
-            pygame.init()
-            pygame.display.init()
-            self.screen = pygame.display.set_mode((screen_width, screen_height))
-
-        if not self.clock:
-            self.clock = pygame.time.Clock()
-
-        self.surf = pygame.Surface((screen_width, screen_height))
-        self.surf.fill((255, 255, 255))
-
-        # boundary
-        gfxdraw.hline(self.surf, ww2sw(-4.5), ww2sw(4.5), wh2sh(-4.5), (0, 0, 0))
-        gfxdraw.hline(self.surf, ww2sw(-4.5), ww2sw(4.5), wh2sh(4.5), (0, 0, 0))
-        gfxdraw.vline(self.surf, ww2sw(-4.5), ww2sw(-4.5), wh2sh(4.5), (0, 0, 0))
-        gfxdraw.vline(self.surf, ww2sw(4.5), ww2sw(-4.5), wh2sh(4.5), (0, 0, 0))
-
-        gfxdraw.filled_circle(
-            self.surf,
-            ww2sw(self.goal_location[0]),
-            wh2sh(self.goal_location[1]),
-            world_to_screen(self.goal_location[2]),
-            (0, 255, 0),
+        dir = self.state[:2] + self.car.r * np.array(
+            [np.cos(self.state[2]), np.sin(self.state[2])]
         )
 
-        obstacle = pygame.Rect(
-            ww2sw(self.obstacle_location[0]),
-            wh2sh(self.obstacle_location[1]),
-            world_to_screen(self.obstacle_location[2]),
-            world_to_screen(self.obstacle_location[3]),
+        self.ax.plot([self.state[0], dir[0]], [self.state[1], dir[1]], color="c")
+
+        goal = plt.Circle(
+            self.goal_location[:2], radius=self.goal_location[2], color="g"
+        )
+        self.ax.add_patch(goal)
+
+        lava = plt.Rectangle(
+            self.obstacle_location[:2],
+            self.obstacle_location[2],
+            self.obstacle_location[3],
+            color="r",
+        )
+        self.ax.add_patch(lava)
+        self.ax.hlines(y=[-4.5, 4.5], xmin=[-4.5, -4.5], xmax=[4.5, 4.5], color="k")
+        self.ax.vlines(x=[-4.5, 4.5], ymin=[-4.5, -4.5], ymax=[4.5, 4.5], color="k")
+
+        # brt
+        X, Y = np.meshgrid(
+            np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
+            np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
         )
 
-        gfxdraw.box(self.surf, obstacle, (255, 0, 0))
-
-        gfxdraw.filled_circle(
-            self.surf,
-            ww2sw(self.car.x[0]),
-            wh2sh(self.car.x[1]),
-            world_to_screen(self.car.r),
-            (255, 255, 0) if self.used_hj else (0, 0, 255),
+        index = self.grid.get_index(self.state)
+        # by convention dim[0] == row == y
+        #               dim[1] == col == x
+        # want x to be dim[0], y to be dim[1] so need tranpose
+        # without it, contour is flipped along x and y axis
+        self.ax.contour(
+            X, Y, self.brt[:, :, index[2]].transpose(), levels=[0],
         )
 
-        gfxdraw.line(
-            self.surf,
-            ww2sw(self.car.x[0]),
-            wh2sh(self.car.x[1]),
-            ww2sw(np.cos(self.car.x[2]) * self.car.r + self.car.x[0]),
-            wh2sh(np.sin(self.car.x[2]) * self.car.r + self.car.x[1]),
-            (255, 255, 255),
-        )
+        self.ax.set_xlim(-5, 5)
+        self.ax.set_ylim(-5, 5)
+        self.ax.set_aspect("equal")
+        self.ax.set_xlabel("x")
+        self.ax.set_ylabel("y")
+        self.ax.autoscale_view()
 
-        self.surf = pygame.transform.flip(self.surf, False, True)
-        self.screen.blit(self.surf, (0, 0))
+        self.fig.canvas.draw()
+        img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
+        img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3,))
+
         if mode == "human":
-            pygame.event.pump()
-            self.clock.tick(self.metadata["render_fps"])
-            pygame.display.flip()
-
-        if mode == "rgb_array":
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
-            )
-        else:
-            return self.isopen
+            self.fig.canvas.flush_events()
+            plt.pause(1 / 30)
+        # plt.imshow(img)
+        # plt.show(block=False)
+        # plt.pause(1 / self.metadata["render_fps"])
+        # return img
 
     def close(self):
-        if not self.screen:
-            import pygame
-
-            pygame.display.quit()
-            pygame.quit()
-            self.isopen = False
+        return
 
     def normalize_angle(self, theta):
         """normalize theta to be in range (-pi, pi]"""
@@ -538,7 +529,7 @@ class DubinsHallwayEnv(gym.Env):
         spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
         return self.car.safe_ctrl(0, self.state, spat_deriv)
 
-    def use_opt_ctrl(self, threshold=0.2, threshold_ra=0.1):
+    def use_opt_ctrl(self, threshold=0.3, threshold_ra=0.2):
         if self.use_reach_avoid:
             return self.grid.get_value(self.brt, self.state) > threshold_ra
         else:
@@ -564,17 +555,16 @@ if __name__ in "__main__":
     from gym.wrappers import TransformObservation
     import gym
 
-    env = gym.make("Safe-DubinsHallway-v1", use_reach_avoid=False)
-    env = TransformObservation(env, lambda obs: obs / env.world_boundary)
-    env = RecordEpisodeStatisticsWithCost(env)
+    plt.ion()
+    env = gym.make(
+        "Safe-DubinsHallway-v1", use_reach_avoid=False, use_disturbances=False
+    )
+    # env = TransformObservation(env, lambda obs: obs / env.world_boundary)
+    # env = RecordEpisodeStatisticsWithCost(env)
     obs = env.reset()
     done = False
-    while not done:
+    for _ in range(100):
         env.render()
-        # action = env.action_space.sample()
-        # if env.use_opt_ctrl():
         action = env.opt_ctrl()
         next_obs, reward, done, info = env.step(action)
-        time.sleep(0.03)
         print(info["hj_value"])
-    print(info)

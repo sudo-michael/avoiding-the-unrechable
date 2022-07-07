@@ -21,6 +21,12 @@ register(
     max_episode_steps=500,
 )
 
+register(
+    id="SingleNarrowPassage-v0",
+    entry_point="atu.envs:SingleNarrowPassageEnv",
+    max_episode_steps=250,
+)
+
 # register(
 #     id="Safe-DubinsHallway-Flipped-v1",
 #     entry_point="atu.envs:DubinsHallwayEnv",
