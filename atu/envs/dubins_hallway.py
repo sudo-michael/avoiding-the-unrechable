@@ -1,75 +1,12 @@
-from turtle import pen
 import gym
 import os
-import pygame
 from gym.spaces import Box
-from atu.optimized_dp.Grid.GridProcessing import Grid
 from atu.optimized_dp.brt_dubin_hallway import g as grid
+from atu.utils import spa_deriv
 import numpy as np
-import math
-
-import matplotlib
 import matplotlib.pyplot as plt
 
 
-def spa_deriv(index, V, g, periodic_dims=[]):
-    """
-    Calculates the spatial derivatives of V at an index for each dimension
-
-    Args:
-        index:
-        V:
-        g:
-        periodic_dims:
-
-    Returns:
-        List of left and right spatial derivatives for each dimension
-
-    """
-    spa_derivatives = []
-    for dim, idx in enumerate(index):
-        if dim == 0:
-            left_index = []
-        else:
-            left_index = list(index[:dim])
-
-        if dim == len(index) - 1:
-            right_index = []
-        else:
-            right_index = list(index[dim + 1 :])
-
-        next_index = tuple(left_index + [index[dim] + 1] + right_index)
-        prev_index = tuple(left_index + [index[dim] - 1] + right_index)
-
-        if idx == 0:
-            if dim in periodic_dims:
-                left_periodic_boundary_index = tuple(
-                    left_index + [V.shape[dim] - 1] + right_index
-                )
-                left_boundary = V[left_periodic_boundary_index]
-            else:
-                left_boundary = V[index] + np.abs(V[next_index] - V[index]) * np.sign(
-                    V[index]
-                )
-            left_deriv = (V[index] - left_boundary) / g.dx[dim]
-            right_deriv = (V[next_index] - V[index]) / g.dx[dim]
-        elif idx == V.shape[dim] - 1:
-            if dim in periodic_dims:
-                right_periodic_boundary_index = tuple(left_index + [0] + right_index)
-                right_boundary = V[right_periodic_boundary_index]
-            else:
-                right_boundary = V[index] + np.abs(V[index] - V[prev_index]) * np.sign(
-                    [V[index]]
-                )
-            left_deriv = (V[index] - V[prev_index]) / g.dx[dim]
-            right_deriv = (right_boundary - V[index]) / g.dx[dim]
-        else:
-            left_deriv = (V[index] - V[prev_index]) / g.dx[dim]
-            right_deriv = (V[next_index] - V[index]) / g.dx[dim]
-
-        spa_derivatives.append((left_deriv + right_deriv) / 2)
-
-    return np.array(spa_derivatives)
 
 
 class DubinsCar:
@@ -90,7 +27,7 @@ class DubinsCar:
         self.d_max = d_max
         self.u_mode = u_mode
         self.d_mode = d_mode
-        self.r = 0.2  # barely touch lava sometimes
+        self.r = 0.2  
 
     def opt_ctrl(self, t, state, spat_deriv):
         opt_w = None
@@ -167,7 +104,9 @@ class DubinsCar:
 
 class DubinsHallwayEnv(gym.Env):
 
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
+    metadata = {"render_modes": ["human", "rgb_array"], 
+    "render.modes": ["human", "rgb_array"],
+    "render_fps": 30}
 
     def __init__(
         self,
@@ -178,11 +117,6 @@ class DubinsHallwayEnv(gym.Env):
         goal_location=np.array([-2, 2.3, 0.5]),
     ) -> None:
         self.car = DubinsCar()
-        self.goal = 0
-        self.screen = None
-        self.clock = None
-        self.isopen = True
-        self.used_hj = False
         self.use_reach_avoid = use_reach_avoid
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
@@ -190,11 +124,11 @@ class DubinsHallwayEnv(gym.Env):
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        if self.use_reach_avoid:
+        if self.use_reach_avoid and self.use_disturbances:
             self.car = DubinsCar(u_mode="min", d_mode="max")  # ra
-            print("using reach avoid brt")
+            print("reach avoid brt with disturbances")
             self.brt = np.load(
-                os.path.join(dir_path, "assets/brts/reach_avoid_hallway.npy")
+                os.path.join(dir_path, "assets/brts/reach_avoid_hallway_dist.npy")
             )
         else:
             self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
@@ -206,22 +140,16 @@ class DubinsHallwayEnv(gym.Env):
                     d_min=[-0.1, -0.1, -0.1],
                     d_max=[0.1, 0.1, 0.1],
                 )
-
-            if self.use_disturbances:
-                print("using max over min brt with disturbances")
-                self.brt = np.load(
-                    # os.path.join(dir_path, "assets/brts/max_over_min_brt_dist_035.npy")
-                    # os.path.join(dir_path, "assets/brts/min_brt_dist.npy")
-                    os.path.join(dir_path, "assets/brts/min_brt_dist.npy")
+                print("max over min brt with disturbances")
+                self.max_over_min_brt = np.load(
+                    os.path.join(dir_path, "assets/brts/max_over_min_brt_dist.npy")
                 )
+                self.brt = np.load(os.path.join(dir_path, "assets/brts/min_brt_dist.npy"))
             else:
-                print("no dist")
-                # self.brt = np.load(
-                #     os.path.join(dir_path, "assets/brts/min_brt_dist.npy")
-                # )
+                print("max over min brt with disturbances")
+                self.max_over_min_brt = np.load(os.path.join(dir_path, "assets/brts/max_over_min_brt.npy"))
                 self.brt = np.load(os.path.join(dir_path, "assets/brts/min_brt.npy"))
 
-        self.min_brt = np.load(os.path.join(dir_path, "assets/brts/min_brt_dist.npy"))
 
         self.state = None
         self.dt = 0.05
@@ -251,34 +179,26 @@ class DubinsHallwayEnv(gym.Env):
         self.top_wall = 4.5
 
         self.grid = grid
+        self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
         # self.hist = []
 
-        self.fig, self.ax = plt.subplots(figsize=(5, 5))
-
     def reset(self, seed=None):
         # self.hist.clear()
-        self.use_hj = False
         while True:
             self.car.x = np.random.uniform(
-                # low=-self.world_boundary,
-                # high=self.world_boundary
                 low=-self.world_boundary,
                 high=np.array([0.0, -0.5, np.pi]),  # reset in bottom left-half of map
             )
 
             if (
-                self.grid.get_value(self.min_brt, self.car.x) > 0.2
+                self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.2
             ):  # place car in location that is always possible to avoid obstacle
                 break
 
-        self.car.x = np.array([-3.5, -2, -np.pi])
-        # self.car.x = np.array([-1.1, 2.6, 0.4])
-        # self.car.x = np.array([-2, -3, 0])
         self.car.x = np.array(self.car.x, dtype=np.float32)
-        self.state = self.car.x
-        # self.hist.append(np.copy(self.state))
-        return np.array(self.car.x)
+        self.state = np.copy(self.car.x)
+        return np.copy(self.state)
 
     def step(self, action: np.array):
         if isinstance(action, dict):
@@ -297,24 +217,14 @@ class DubinsHallwayEnv(gym.Env):
             )
         else:
             self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
-        # self.car.x[0] = min(
-        #     max(self.left_wall + self.car.r, self.car.x[0]),
-        #     self.right_wall - self.car.r,
-        # )
-        # self.car.x[1] = min(
-        #     max(self.bottom_wall + self.car.r, self.car.x[1]),
-        #     self.top_wall - self.car.r,
-        # )
         self.car.x[2] = self.normalize_angle(self.car.x[2])
-
         self.state = np.copy(self.car.x)
-        print(f"{self.state=}")
+        # print(f"{self.state=}")
 
         reward = -np.linalg.norm(self.state[:2] - self.goal_location[:2])
 
         done = False
         info = {}
-        # info["cost"] = 0
         info["cost"] = used_hj
         info["safe"] = True
         if self.collision_rect_circle(
@@ -326,33 +236,20 @@ class DubinsHallwayEnv(gym.Env):
             self.car.x[1],
             self.car.r,
         ):
-            # print("hit car")
-            # print(self.hist)
-            import pickle
-            import sys
-
-            # with open(r"car_crash.pickle", "wb") as f:
-            #     pickle.dump(self.hist, f)
-            #     print("dump done")
-
-            # sys.exit()
             if self.done_if_unsafe:
                 done = True
             elif self.penalize_unsafe:
                 reward = self.min_reward * 2
-            info["cost"] = 1
             info["safe"] = False
         elif not (
             self.left_wall + self.car.r <= self.car.x[0] <= self.right_wall - self.car.r
         ):
             done = True
-            info["cost"] = 1
             info["safe"] = False
         elif not (
             self.bottom_wall + self.car.r <= self.car.x[1] <= self.top_wall - self.car.r
         ):
             done = True
-            info["cost"] = 1
             info["safe"] = False
         elif self.near_goal():
             done = True
@@ -464,13 +361,11 @@ class DubinsHallwayEnv(gym.Env):
 
         if mode == "human":
             self.fig.canvas.flush_events()
-            plt.pause(1 / 30)
-        # plt.imshow(img)
-        # plt.show(block=False)
-        # plt.pause(1 / self.metadata["render_fps"])
-        # return img
+            plt.pause(1 / self.metadata["render_fps"])
+        return img
 
     def close(self):
+        plt.close()
         return
 
     def normalize_angle(self, theta):
@@ -514,7 +409,8 @@ class DubinsHallwayEnv(gym.Env):
 
     def opt_ctrl(self):
         index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        brt = self.ra if self.use_reach_avoid else self.max_over_min_brt
+        spat_deriv = spa_deriv(index, brt, self.grid, periodic_dims=[2])
         opt_ctrl = self.car.opt_ctrl(0, self.state, spat_deriv)
         return opt_ctrl
 
@@ -529,11 +425,11 @@ class DubinsHallwayEnv(gym.Env):
         spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
         return self.car.safe_ctrl(0, self.state, spat_deriv)
 
-    def use_opt_ctrl(self, threshold=0.3, threshold_ra=0.2):
+    def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.2):
         if self.use_reach_avoid:
-            return self.grid.get_value(self.brt, self.state) > threshold_ra
+            return self.grid.get_value(self.ra, self.state) > threshold_ra
         else:
-            return self.grid.get_value(self.brt, self.state) < threshold
+            return self.grid.get_value(self.max_over_min_brt, self.state) < threshold
 
     def unsafe_ctrl(self):
         index = self.grid.get_index(self.state)
@@ -548,23 +444,26 @@ class DubinsHallwayEnv(gym.Env):
 
 
 if __name__ in "__main__":
-
-    import time
-    from atu.wrappers import RecordEpisodeStatisticsWithCost
-    import atu
-    from gym.wrappers import TransformObservation
     import gym
-
-    plt.ion()
     env = gym.make(
-        "Safe-DubinsHallway-v1", use_reach_avoid=False, use_disturbances=False
+        "Safe-DubinsHallway-v1", use_reach_avoid=False, use_disturbances=True
     )
-    # env = TransformObservation(env, lambda obs: obs / env.world_boundary)
-    # env = RecordEpisodeStatisticsWithCost(env)
+
+    env = gym.wrappers.RecordVideo(env, 'tmp/')
     obs = env.reset()
     done = False
-    for _ in range(100):
-        env.render()
-        action = env.opt_ctrl()
+    while not done:
+        if env.use_opt_ctrl():
+            print('use opt ctrl')
+            action = env.opt_ctrl()
+        else:
+            action = env.action_space.sample()
         next_obs, reward, done, info = env.step(action)
+        if done:
+            break
         print(info["hj_value"])
+
+    env.close()
+    import time
+    time.sleep(1)
+    print('done')
