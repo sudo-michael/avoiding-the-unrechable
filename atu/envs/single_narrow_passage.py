@@ -1,9 +1,5 @@
-from asyncore import read
-from tkinter import W
-from turtle import pen
 import gym
 import os
-import pygame
 from gym.spaces import Box
 from atu.optimized_dp.Grid.GridProcessing import Grid
 import atu.optimized_dp.brt_single_narrow_passage as brt_config

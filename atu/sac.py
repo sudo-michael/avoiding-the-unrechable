@@ -2,7 +2,6 @@
 
 # allow pygame to render headless
 import os
-
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 import argparse
@@ -30,7 +29,7 @@ from atu.safety_critic import learn_safety_critic
 
 
 import atu
-from atu.wrappers import RecordEpisodeStatisticsWithCost, SauteWrapper
+from atu.wrappers import RecordEpisodeStatisticsWithCost
 
 
 def parse_args():
@@ -58,14 +57,6 @@ def parse_args():
         help="Eval")
     parser.add_argument("--lagrange", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use Sac Lagrange") # https://github.com/AlgTUDelft/WCSAC/blob/main/wc_sac/sac/saclag.py
-    parser.add_argument("--saute", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Use Saute") 
-    parser.add_argument("--saute-discount-factor", type=float, default=0.99, nargs="?", const=True,
-        help="Use Saute") 
-    parser.add_argument("--saute-unsafe-reward", type=float, default=-10, nargs="?", const=True,
-        help="Use Saute") 
-    parser.add_argument("--saute-safety-budget", type=float, default=1.0, nargs="?", const=True,
-        help="Use Saute") 
     parser.add_argument("--render", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Render")
     parser.add_argument("--haco", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -159,7 +150,7 @@ def parse_args():
 # controller = HelperOCController()
 
 
-def make_env(env_id, seed, idx, capture_video, run_name, saute, eval=False):
+def make_env(env_id, seed, idx, capture_video, run_name, eval=False):
     def thunk():
         if "Pendulum" in env_id:
             env = gym.make(
@@ -187,7 +178,7 @@ def make_env(env_id, seed, idx, capture_video, run_name, saute, eval=False):
                     f"videos/{run_name}",
                 )
             elif eval:
-                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}/eval")
+                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}/eval", episode_trigger=lambda x : x % 2)
 
         if args.scale_reward:
             env = gym.wrappers.TransformReward(env, lambda r: r / env.min_reward)
@@ -338,33 +329,33 @@ if __name__ == "__main__":
         )
 
         # log wandb run id with hyperparamters when doing abilation
-        import csv
+        # import csv
 
-        run_id = wandb.run.id
-        args_dict = dict(vars(args))
-        row = {"run_id": wandb.run.id}
-        keep_track_of = [
-            "env_id",
-            "sample_uniform",
-            "reward_hj",
-            "reward_shape",
-            "done_if_unsafe",
-            "use_min_reward",
-            "use_min_reward",
-            "imagine_trajectory",
-            "imagine_unsafe_actions",
-            "use_hj",
-        ]
-        for key in keep_track_of:
-            row[key] = args_dict[key]
+        # run_id = wandb.run.id
+        # args_dict = dict(vars(args))
+        # row = {"run_id": wandb.run.id}
+        # keep_track_of = [
+        #     "env_id",
+        #     "sample_uniform",
+        #     "reward_hj",
+        #     "reward_shape",
+        #     "done_if_unsafe",
+        #     "use_min_reward",
+        #     "use_min_reward",
+        #     "imagine_trajectory",
+        #     "imagine_unsafe_actions",
+        #     "use_hj",
+        # ]
+        # for key in keep_track_of:
+        #     row[key] = args_dict[key]
 
-        import os.path
+        # import os.path
 
-        with open(f"data/{args_dict['env_id']}_v0.csv", "a", newline="") as f:
-            writer = csv.DictWriter(f, row.keys())
-            if not os.path.isfile(f"data/{args_dict['env_id']}_v0.csv"):
-                writer.writeheader()
-            writer.writerow(row)
+        # with open(f"data/{args_dict['env_id']}_v0.csv", "a", newline="") as f:
+        #     writer = csv.DictWriter(f, row.keys())
+        #     if not os.path.isfile(f"data/{args_dict['env_id']}_v0.csv"):
+        #         writer.writeheader()
+        #     writer.writerow(row)
 
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
@@ -381,7 +372,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed, 0, args.capture_video, run_name, args.saute)]
+        [make_env(args.env_id, args.seed, 0, args.capture_video, run_name)]
     )
 
     eval_envs = gym.vector.SyncVectorEnv(
@@ -392,7 +383,6 @@ if __name__ == "__main__":
                 1,
                 args.capture_video,
                 run_name,
-                args.saute,
                 eval=True,
             )
         ]
@@ -452,26 +442,26 @@ if __name__ == "__main__":
         device=device,
     )
 
-    rb_near_brt = CostReplayBuffer(
-        args.buffer_size,
-        envs.single_observation_space,
-        envs.single_action_space,
-        device=device,
-    )
+    # rb_near_brt = CostReplayBuffer(
+    #     args.buffer_size,
+    #     envs.single_observation_space,
+    #     envs.single_action_space,
+    #     device=device,
+    # )
 
-    rb_haco = ReplayBuffer(
-        args.buffer_size,
-        envs.single_observation_space,
-        envs.single_action_space,
-        device=device,
-    )
+    # rb_haco = ReplayBuffer(
+    #     args.buffer_size,
+    #     envs.single_observation_space,
+    #     envs.single_action_space,
+    #     device=device,
+    # )
 
-    rb_hj = ReplayBuffer(
-        args.buffer_size,
-        envs.single_observation_space,
-        envs.single_action_space,
-        device=device,
-    )
+    # rb_hj = ReplayBuffer(
+    #     args.buffer_size,
+    #     envs.single_observation_space,
+    #     envs.single_action_space,
+    #     device=device,
+    # )
 
     start_time = time.time()
 
@@ -680,6 +670,7 @@ if __name__ == "__main__":
         real_next_obs = next_obs.copy()
         for idx, d in enumerate(dones):
             if d:
+                breakpoint()
                 real_next_obs[idx] = infos[idx]["terminal_observation"]
         rb.add(obs, real_next_obs, actions, rewards, costs, dones, infos)
 
@@ -713,26 +704,26 @@ if __name__ == "__main__":
         obs = next_obs
 
         if global_step > args.learning_starts:
-            if args.haco:
-                data_haco = rb_haco.sample(args.batch_size)
-                with torch.no_grad():
-                    # what (s, a) pairs to use?
-                    # actions ~ pi_theta with I(s, a) determined by used_hj
-                    next_state_actions, next_state_log_pi, _ = actor.get_action(
-                        data_haco.next_observations
-                    )
-                    q_critic_f1_next_target = q_critic_f1_target(
-                        data_haco.next_observations, next_state_actions
-                    )
-                    q_critic_f2_next_target = q_critic_f2_target(
-                        data_haco.next_observations, next_state_actions
-                    )
-                    min_q_int_f_next_target = torch.min(
-                        q_critic_f1_next_target, q_critic_f2_next_target
-                    )
-                    next_q_int_value = data_haco.rewards.flatten() + (
-                        1 - data_haco.dones.flatten()
-                    ) * args.gamma * (min_q_int_f_next_target).view(-1)
+            # if args.haco:
+            #     data_haco = rb_haco.sample(args.batch_size)
+            #     with torch.no_grad():
+            #         # what (s, a) pairs to use?
+            #         # actions ~ pi_theta with I(s, a) determined by used_hj
+            #         next_state_actions, next_state_log_pi, _ = actor.get_action(
+            #             data_haco.next_observations
+            #         )
+            #         q_critic_f1_next_target = q_critic_f1_target(
+            #             data_haco.next_observations, next_state_actions
+            #         )
+            #         q_critic_f2_next_target = q_critic_f2_target(
+            #             data_haco.next_observations, next_state_actions
+            #         )
+            #         min_q_int_f_next_target = torch.min(
+            #             q_critic_f1_next_target, q_critic_f2_next_target
+            #         )
+            #         next_q_int_value = data_haco.rewards.flatten() + (
+            #             1 - data_haco.dones.flatten()
+            #         ) * args.gamma * (min_q_int_f_next_target).view(-1)
 
             data = rb.sample(args.batch_size)
             with torch.no_grad():

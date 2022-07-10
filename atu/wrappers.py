@@ -1,4 +1,5 @@
 from itertools import accumulate
+from re import U
 import time
 from collections import deque
 from typing import Optional
@@ -18,6 +19,7 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
         self.total_cost = 0
         self.total_unsafe = 0
         self.total_reach_goal = 0
+        self.total_use_hj = 0
         self.episode_count = 0
         self.episode_returns = None
         self.episode_lengths = None
@@ -36,11 +38,13 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
     def step(self, action):
         observations, rewards, dones, infos = super().step(action)
         costs = np.zeros_like(rewards)
+        uses_hj = np.zeros_like(rewards)
         safes = np.ones_like(rewards)
         self.episode_returns += rewards
         self.episode_lengths += 1
         if not self.is_vector_env:
             costs = infos.get("cost", 0)
+            uses_hj = infos.get("use_hj", False)
             safes = infos.get("safe", True)
             infos = [infos]
             dones = [dones]
@@ -51,8 +55,10 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
             for i in range(len(infos)):
                 costs[i] = infos[i].get("cost", 0)
                 safes[i] = infos[i].get("safe", True)
+                uses_hj[i] = infos[i].get('use_hj', False)
             self.total_cost += sum(costs)
             self.total_unsafe += sum(np.invert(safes))
+            self.total_use_hj += sum(uses_hj)
         self.episode_costs += costs
         self.episode_unsafes += np.invert(safes)
 
@@ -72,8 +78,10 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
                     "c": episode_cost,
                     "us": episode_unsafe,
                     "prg": self.total_reach_goal / self.episode_count,
+                    "trg": self.total_reach_goal,
                     "tc": self.total_cost,
                     "tus": self.total_unsafe,
+                    "thj": self.total_use_hj,
                     "t": round(time.perf_counter() - self.t0, 6),
                 }
                 infos[i]["episode"] = episode_info
