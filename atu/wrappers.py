@@ -50,6 +50,7 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
             dones = [dones]
             self.total_cost += costs
             self.total_unsafe += not safes
+            self.total_use_hj += not uses_hj
         else:
             infos = list(infos)  # Convert infos to mutable type
             for i in range(len(infos)):
