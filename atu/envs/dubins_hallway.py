@@ -70,8 +70,7 @@ class DubinsCar:
         return np.array([w_lower, w_upper])
 
     def unsafe_ctrl(self, t, state, spat_deriv, uniform_sample=True):
-        safe_ctrl_bounds = self.safe_ctrl(
-            t, state, spat_deriv, uniform_sample=False)
+        safe_ctrl_bounds = self.safe_ctrl(t, state, spat_deriv, uniform_sample=False)
         for _ in range(100):
             ctrl = np.random.uniform(-self.w_max, self.w_max)
             if not (safe_ctrl_bounds[0] <= ctrl <= safe_ctrl_bounds[1]):
@@ -103,9 +102,11 @@ class DubinsCar:
 
 class DubinsHallwayEnv(gym.Env):
 
-    metadata = {"render_modes": ["human", "rgb_array"],
-                "render.modes": ["human", "rgb_array"],
-                "render_fps": 30}
+    metadata = {
+        "render_modes": ["human", "rgb_array"],
+        "render.modes": ["human", "rgb_array"],
+        "render_fps": 30,
+    }
 
     def __init__(
         self,
@@ -126,9 +127,13 @@ class DubinsHallwayEnv(gym.Env):
         if self.use_reach_avoid and self.use_disturbances:
             self.car = DubinsCar(u_mode="min", d_mode="max")  # ra
             print("reach avoid brt with disturbances")
-            self.brt = np.load(
-                os.path.join(
-                    dir_path, "assets/brts/reach_avoid_hallway_dist.npy")
+            self.reach_avoid_brt = np.load(
+                os.path.join(dir_path, "assets/brts/reach_avoid_hallway_dist.npy")
+            )
+
+            # for reseting in feasible state
+            self.max_over_min_brt = np.load(
+                os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
             )
         else:
             self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
@@ -142,17 +147,17 @@ class DubinsHallwayEnv(gym.Env):
                 )
                 print("max over min brt with disturbances")
                 self.max_over_min_brt = np.load(
-                    os.path.join(
-                        dir_path, "assets/brts/max_over_min_brt_dist.npy")
+                    os.path.join(dir_path, "assets/brts/max_over_min_brt_dist.npy")
                 )
-                self.brt = np.load(os.path.join(
-                    dir_path, "assets/brts/min_brt_dist.npy"))
+                self.brt = np.load(
+                    os.path.join(dir_path, "assets/brts/min_brt_dist.npy")
+                )
             else:
                 print("max over min brt with disturbances")
-                self.max_over_min_brt = np.load(os.path.join(
-                    dir_path, "assets/brts/max_over_min_brt.npy"))
-                self.brt = np.load(os.path.join(
-                    dir_path, "assets/brts/min_brt.npy"))
+                self.max_over_min_brt = np.load(
+                    os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
+                )
+                self.brt = np.load(os.path.join(dir_path, "assets/brts/min_brt.npy"))
 
         self.state = None
         self.dt = 0.05
@@ -211,20 +216,17 @@ class DubinsHallwayEnv(gym.Env):
         else:
             used_hj = False
 
-        # breakpoint()
-        # aciton = action.reshape((1, ))
-        action = action[0]
+        if action.shape != (1,):
+            action = action[0]
 
         if self.use_disturbances:
             self.car.x = (
-                self.car.dynamics(0, self.car.x, action,
-                                  disturbance=self.opt_dist())
+                self.car.dynamics(0, self.car.x, action, disturbance=self.opt_dist())
                 * self.dt
                 + self.car.x
             )
         else:
-            self.car.x = self.car.dynamics(
-                0, self.car.x, action) * self.dt + self.car.x
+            self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
         self.car.x[2] = self.normalize_angle(self.car.x[2])
         self.state = np.copy(self.car.x)
         # print(f"{self.state=}")
@@ -233,9 +235,9 @@ class DubinsHallwayEnv(gym.Env):
 
         done = False
         info = {}
-        info['used_hj'] = used_hj
+        info["used_hj"] = used_hj
         info["safe"] = True
-        info['cost'] = 0
+        info["cost"] = 0
         if self.collision_rect_circle(
             self.obstacle_location[0],
             self.obstacle_location[1],
@@ -250,17 +252,15 @@ class DubinsHallwayEnv(gym.Env):
             elif self.penalize_unsafe:
                 reward = self.min_reward * 2
             info["safe"] = False
-            info['cost'] = 1
+            info["cost"] = 1
         elif not (
-            self.left_wall +
-                self.car.r <= self.car.x[0] <= self.right_wall - self.car.r
+            self.left_wall + self.car.r <= self.car.x[0] <= self.right_wall - self.car.r
         ):
             done = True
             info["safe"] = False
-            info['cost'] = 1
+            info["cost"] = 1
         elif not (
-            self.bottom_wall +
-                self.car.r <= self.car.x[1] <= self.top_wall - self.car.r
+            self.bottom_wall + self.car.r <= self.car.x[1] <= self.top_wall - self.car.r
         ):
             done = True
             info["safe"] = False
@@ -271,7 +271,10 @@ class DubinsHallwayEnv(gym.Env):
             info["reach_goal"] = True
 
         # cost is based on distance to obstacle
-        info["hj_value"] = self.grid.get_value(self.brt, self.state)
+        if self.use_reach_avoid:
+            info["hj_value"] = self.grid.get_value(self.reach_avoid_brt, self.state)
+        else:
+            info["hj_value"] = self.grid.get_value(self.brt, self.state)
         # if info["hj_value"] < 0:
         # print(f"er: {self.state}")
 
@@ -330,8 +333,7 @@ class DubinsHallwayEnv(gym.Env):
             [np.cos(self.state[2]), np.sin(self.state[2])]
         )
 
-        self.ax.plot([self.state[0], dir[0]], [
-                     self.state[1], dir[1]], color="c")
+        self.ax.plot([self.state[0], dir[0]], [self.state[1], dir[1]], color="c")
 
         goal = plt.Circle(
             self.goal_location[:2], radius=self.goal_location[2], color="g"
@@ -345,17 +347,13 @@ class DubinsHallwayEnv(gym.Env):
             color="r",
         )
         self.ax.add_patch(lava)
-        self.ax.hlines(y=[-4.5, 4.5], xmin=[-4.5, -4.5],
-                       xmax=[4.5, 4.5], color="k")
-        self.ax.vlines(x=[-4.5, 4.5], ymin=[-4.5, -4.5],
-                       ymax=[4.5, 4.5], color="k")
+        self.ax.hlines(y=[-4.5, 4.5], xmin=[-4.5, -4.5], xmax=[4.5, 4.5], color="k")
+        self.ax.vlines(x=[-4.5, 4.5], ymin=[-4.5, -4.5], ymax=[4.5, 4.5], color="k")
 
         # brt
         X, Y = np.meshgrid(
-            np.linspace(self.grid.min[0], self.grid.max[0],
-                        self.grid.pts_each_dim[0]),
-            np.linspace(self.grid.min[1], self.grid.max[1],
-                        self.grid.pts_each_dim[1]),
+            np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
+            np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
         )
 
         index = self.grid.get_index(self.state)
@@ -427,14 +425,18 @@ class DubinsHallwayEnv(gym.Env):
 
     def opt_ctrl(self):
         index = self.grid.get_index(self.state)
-        brt = self.ra if self.use_reach_avoid else self.max_over_min_brt
+        brt = self.reach_avoid_brt if self.use_reach_avoid else self.max_over_min_brt
         spat_deriv = spa_deriv(index, brt, self.grid, periodic_dims=[2])
         opt_ctrl = self.car.opt_ctrl(0, self.state, spat_deriv)
         return opt_ctrl
 
     def opt_dist(self):
         index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        # always use from max over min?
+        # spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(
+            index, self.max_over_min_brt, self.grid, periodic_dims=[2]
+        )
         opt_dist = self.car.opt_dist(0, self.state, spat_deriv)
         return opt_dist
 
@@ -445,7 +447,7 @@ class DubinsHallwayEnv(gym.Env):
 
     def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.2):
         if self.use_reach_avoid:
-            return self.grid.get_value(self.ra, self.state) > threshold_ra
+            return self.grid.get_value(self.reach_avoid_brt, self.state) > threshold_ra
         else:
             return self.grid.get_value(self.max_over_min_brt, self.state) < threshold
 

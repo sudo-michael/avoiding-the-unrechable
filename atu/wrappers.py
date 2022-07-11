@@ -55,7 +55,7 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
             for i in range(len(infos)):
                 costs[i] = infos[i].get("cost", 0)
                 safes[i] = infos[i].get("safe", True)
-                uses_hj[i] = infos[i].get('use_hj', False)
+                uses_hj[i] = infos[i].get("used_hj", False)
             self.total_cost += sum(costs)
             self.total_unsafe += sum(np.invert(safes))
             self.total_use_hj += sum(uses_hj)
@@ -67,7 +67,7 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
                 self.episode_count += 1
 
                 infos[i] = infos[i].copy()
-                self.total_reach_goal += infos[i].get('reach_goal', False)
+                self.total_reach_goal += infos[i].get("reach_goal", False)
                 episode_return = self.episode_returns[i]
                 episode_cost = self.episode_costs[i]
                 episode_unsafe = self.episode_unsafes[i]
