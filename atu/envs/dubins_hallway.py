@@ -253,18 +253,21 @@ class DubinsHallwayEnv(gym.Env):
                 reward = self.min_reward * 2
             info["safe"] = False
             info["cost"] = 1
+            info["collision"] = "lava"
         elif not (
             self.left_wall + self.car.r <= self.car.x[0] <= self.right_wall - self.car.r
         ):
             done = True
             info["safe"] = False
             info["cost"] = 1
+            info["collision"] = "wall"
         elif not (
             self.bottom_wall + self.car.r <= self.car.x[1] <= self.top_wall - self.car.r
         ):
             done = True
             info["safe"] = False
             info["cost"] = 1
+            info["collision"] = "wall"
         elif self.near_goal():
             done = True
             reward = 100.0
@@ -445,7 +448,7 @@ class DubinsHallwayEnv(gym.Env):
         spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
         return self.car.safe_ctrl(0, self.state, spat_deriv)
 
-    def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.2):
+    def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.0):
         if self.use_reach_avoid:
             return self.grid.get_value(self.reach_avoid_brt, self.state) > threshold_ra
         else:
