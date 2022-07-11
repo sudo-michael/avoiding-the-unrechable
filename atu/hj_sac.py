@@ -43,7 +43,7 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
-    parser.add_argument("--eval-every", type=int, default=20_000,
+    parser.add_argument("--eval-every", type=int, default=10_000,
         help="Eval every x steps")
 
     # Algorithm specific arguments
@@ -51,12 +51,16 @@ def parse_args():
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
-    parser.add_argument("--buffer-size", type=int, default=100_000,
+    parser.add_argument("--buffer-size", type=int, default=1_000_000,
+        help="the replay memory buffer size")
+    parser.add_argument("--reach-avoid-buffer-size", type=int, default=10_000,
         help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
+    parser.add_argument("--max-grad-norm", type=float, default=0.5,
+        help="the maximum norm for the gradient clipping")
     parser.add_argument("--batch-size", type=int, default=256,
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
@@ -110,9 +114,11 @@ def make_env(args, seed, capture_video, idx, run_name, eval=False):
                     env = gym.wrappers.RecordVideo(env, f"videos_eval/{run_name}")
                 else:
                     env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        env = gym.wrappers.TransformObservation(
-            env, lambda obs: obs / env.world_boundary
-        )
+        # env = gym.wrappers.TransformObservation(
+        #     env, lambda obs: obs / env.world_boundary
+        # )
+        # env = gym.wrappers.NormalizeReward(env)
+        # env = gym.wrappers.NormalizeObservation(env)
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -281,6 +287,15 @@ if __name__ == "__main__":
         device,
         handle_timeout_termination=True,
     )
+
+    rb_reach_avoid = ReplayBuffer(
+        args.reach_avoid_buffer_size,
+        envs.single_observation_space,
+        envs.single_action_space,
+        device,
+        handle_timeout_termination=True,
+    )
+
     start_time = time.time()
 
     used_hj = False
@@ -355,7 +370,8 @@ if __name__ == "__main__":
         )
 
         for info in infos:
-            if info.get("cost") or not info.get("safe", True):
+            if info.get("cost", 0) or not info.get("safe", True):
+                print(info)
                 print(f"safety violation: {obs}")
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
@@ -406,7 +422,7 @@ if __name__ == "__main__":
             reward_shape_rewards = copy.deepcopy(rewards)
             for idx, og_action in og_actions:
                 reward_shape_actions[idx] = og_action
-                reward_shape_rewards[idx] = envs.envs[idx].min_reward
+                reward_shape_rewards[idx] -= envs.envs[idx].min_reward
             rb.add(
                 obs,
                 real_next_obs,
@@ -414,6 +430,13 @@ if __name__ == "__main__":
                 reward_shape_rewards,
                 dones,
                 infos,
+            )
+
+        if args.use_ra:
+            breakpoint()
+            opt_ctrl = np.array([env.opt_ctrl() for env in envs.envs], dtype=np.float32)
+            rb_reach_avoid.add(
+                obs, real_next_obs, opt_ctrl, rewards, dones, infos,
             )
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
@@ -440,10 +463,13 @@ if __name__ == "__main__":
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
-            qf_loss = qf1_loss + qf2_loss
+            qf_loss = (qf1_loss + qf2_loss) / 2
 
             q_optimizer.zero_grad()
             qf_loss.backward()
+            nn.utils.clip_grad_norm_(
+                list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm
+            )
             q_optimizer.step()
 
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
@@ -458,6 +484,9 @@ if __name__ == "__main__":
 
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
+                    nn.utils.clip_grad_norm_(
+                        list(actor.parameters()), args.max_grad_norm
+                    )
                     actor_optimizer.step()
 
                     if args.autotune:
@@ -494,7 +523,7 @@ if __name__ == "__main__":
                 )
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
-                writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
+                writer.add_scalar("losses/qf_loss", qf_loss.item(), global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 writer.add_scalar("losses/alpha", alpha, global_step)
                 writer.add_scalar(
