@@ -18,7 +18,7 @@ register(
 register(
     id="Safe-DubinsHallway-v1",
     entry_point="atu.envs:DubinsHallwayEnv",
-    max_episode_steps=500,
+    max_episode_steps=600,
 )
 
 register(
