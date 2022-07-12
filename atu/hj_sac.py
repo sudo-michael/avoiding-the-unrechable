@@ -43,7 +43,7 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
-    parser.add_argument("--eval-every", type=int, default=10_000,
+    parser.add_argument("--eval-every", type=int, default=5_000,
         help="Eval every x steps")
 
     # Algorithm specific arguments
@@ -51,7 +51,7 @@ def parse_args():
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
-    parser.add_argument("--buffer-size", type=int, default=1_000_000,
+    parser.add_argument("--buffer-size", type=int, default=100_000,
         help="the replay memory buffer size")
     parser.add_argument("--reach-avoid-buffer-size", type=int, default=10_000,
         help="the replay memory buffer size")
@@ -89,6 +89,8 @@ def parse_args():
         help="Use Reach Avoid Control")
     parser.add_argument("--reward-shape", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="pentalty for bad actions")
+    parser.add_argument("--reward-shape-penalty", type=float, default=9.4069,
+        help="reward pentalty for hj takeover")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Reset if unsafe, use min_reward / (1 - dicount facor")
     args = parser.parse_args()
@@ -114,9 +116,9 @@ def make_env(args, seed, capture_video, idx, run_name, eval=False):
                     env = gym.wrappers.RecordVideo(env, f"videos_eval/{run_name}")
                 else:
                     env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        # env = gym.wrappers.TransformObservation(
-        #     env, lambda obs: obs / env.world_boundary
-        # )
+        env = gym.wrappers.TransformObservation(
+            env, lambda obs: obs / env.world_boundary
+        )
         # env = gym.wrappers.NormalizeReward(env)
         # env = gym.wrappers.NormalizeObservation(env)
         env.seed(seed)
@@ -226,6 +228,7 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+
     # env setup
     envs = gym.vector.SyncVectorEnv(
         [
@@ -298,11 +301,8 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    used_hj = False
-    if args.use_hj:
-        og_actions = []
-
     def eval_policy(envs, actor, episodes=10):
+        print('eval policy')
         actor.eval()
         total_episodic_return = 0
         total_episodic_cost = 0
@@ -315,7 +315,6 @@ if __name__ == "__main__":
                 with torch.no_grad():
                     actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
                 actions = actions.cpu().numpy()
-
                 next_obs, rewards, dones, infos = envs.step(actions)
 
                 obs = next_obs
@@ -344,6 +343,9 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     obs = envs.reset()
     for global_step in range(args.total_timesteps):
+        used_hj = False
+        if args.use_hj:
+            og_actions = []
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
             actions = np.array(
@@ -416,16 +418,25 @@ if __name__ == "__main__":
                 real_next_obs[idx] = infos[idx]["terminal_observation"]
         rb.add(obs, real_next_obs, actions, rewards, dones, infos)
 
-        if args.reward_shape:
+        if args.reward_shape and len(og_actions):
             # penalize for taking original action instead of opt ctrl
             reward_shape_actions = copy.deepcopy(actions)
             reward_shape_rewards = copy.deepcopy(rewards)
             for idx, og_action in og_actions:
+                sim_next_obs, sim_rew, sim_done, sim_info = envs.envs[idx].simulate_step(obs[idx], og_action)
+                gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
                 reward_shape_actions[idx] = og_action
-                reward_shape_rewards[idx] -= envs.envs[idx].min_reward
+                # previously had a bug of 
+                # reward_shape_rewards[idx] -= envs.envs[idx].min_reward # bad since min_reward was negative
+                # min(gardVdotFxu, 0) since there shouldn't be a penalty for taking a safe action
+                cost = args.reward_shape_penalty * min(gradVdotFxu, 0)
+                assert cost < 0, f"{cost=} must be negative: {gradVdotFxu=}"
+                reward_shape_rewards[idx] += cost
+
+            # since only 1 instance, just wrapping everything in lists
             rb.add(
                 obs,
-                real_next_obs,
+                [sim_next_obs],
                 reward_shape_actions,
                 reward_shape_rewards,
                 dones,
