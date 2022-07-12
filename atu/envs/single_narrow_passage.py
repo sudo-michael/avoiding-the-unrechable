@@ -5,6 +5,7 @@ from atu.optimized_dp.Grid.GridProcessing import Grid
 import atu.optimized_dp.brt_single_narrow_passage as brt_config
 import numpy as np
 import math
+import matplotlib.pyplot as plt
 
 
 def spa_deriv(index, V, g, periodic_dims=[]):
@@ -184,6 +185,7 @@ class SingleNarrowPassageEnv(gym.Env):
         self.goal_location = brt_config.GOAL_POS 
 
         self.grid = brt_config.grid
+        self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
         self.hist = []
 
@@ -239,102 +241,83 @@ class SingleNarrowPassageEnv(gym.Env):
         return np.copy(self.state), reward, done, info
 
     def render(self, mode="human"):
-        try:
-            import pygame
-            from pygame import gfxdraw
-        except ImportError:
-            raise gym.DependencyNotInstalled(
-                "pygame is not installed, run `pip install gym[classic_control]`"
-            )
+        self.ax.clear()
 
-        screen_width = 400
-        screen_height = 800
+        # world  boundary
+        self.ax.hlines(y=[-4.0, 4.0], xmin=[-8, -8], xmax=[8, 8], color="k")
+        self.ax.vlines(x=[-8, 8], ymin=[-4.0, -4.0], ymax=[4.0, 4.0], color="k")
 
-        self.world_height = 8
-        self.world_width =  16
+        # middle of road
+        self.ax.hlines(y=[0], xmin=[-8], xmax=[8], color="k", linestyles='dashed', alpha=0.1)
 
-        world_to_screen = lambda x: int(x * screen_height / self.world_height)
+        # curb
+        # self.ax.hlines(y=[-2.8 + 0.5 * brt_config.L * 0.5, 2.8 - 0.5 * brt_config.L * 0.5], xmin=[-8, -8], xmax=[8, 8], color="y")
+        self.ax.hlines(y=[brt_config.CURB_POSITION[0], brt_config.CURB_POSITION[1]], xmin=[-8, -8], xmax=[8, 8], color="y")
 
-        def ww2sw(x):
-            """world width to screen width"""
-            return int(x * (screen_width / self.world_width) + screen_width // 2)
+        state = [-6, -1, 0]
+        robot = plt.Circle(state[:2],  radius=brt_config.L / 2, color="blue")
+        self.ax.add_patch(robot)
 
-        def wh2sh(y):
-            """world height to screen height"""
-            return int(y * (screen_height / self.world_height) + screen_height // 2)
+        dir = state[:2] + 1 * np.array(
+            [np.cos(state[2]), np.sin(state[2])]
+        )
+        self.ax.plot([state[0], dir[0]], [state[1], dir[1]], color="c")
 
-        if not self.screen:
-            pygame.init()
-            pygame.display.init()
-            self.screen = pygame.display.set_mode((screen_width, screen_height))
 
-        if not self.clock:
-            self.clock = pygame.time.Clock()
-
-        self.surf = pygame.Surface((screen_width, screen_height))
-        self.surf.fill((255, 255, 255))
-
-        # boundary
-        # gfxdraw.hline(self.surf, ww2sw(brt_config.grid_low), ww2sw(4.5), wh2sh(-4.5), (0, 0, 0))
-        # gfxdraw.hline(self.surf, ww2sw(-4.5), ww2sw(4.5), wh2sh(4.5), (0, 0, 0))
-        # gfxdraw.vline(self.surf, ww2sw(-4.5), ww2sw(-4.5), wh2sh(4.5), (0, 0, 0))
-        # gfxdraw.vline(self.surf, ww2sw(4.5), ww2sw(-4.5), wh2sh(4.5), (0, 0, 0))
-
-        gfxdraw.filled_circle(
-            self.surf,
-            ww2sw(self.goal_location[0]),
-            wh2sh(self.goal_location[1]),
-            world_to_screen(self.car.r),
-            (0, 255, 0),
+        stranded_car = plt.Circle(
+               brt_config.STRANDED_CAR_POS, radius=brt_config.L / 2, color='r' 
         )
 
-        # obstacle = pygame.Rect(
-        #     ww2sw(self.obstacle_location[0]),
-        #     wh2sh(self.obstacle_location[1]),
-        #     world_to_screen(self.obstacle_location[2]),
-        #     world_to_screen(self.obstacle_location[3]),
-        # )
+        self.ax.add_patch(stranded_car)
 
-        # gfxdraw.box(self.surf, obstacle, (255, 0, 0))
+        stranded_car_unsafe = plt.Circle(
+               brt_config.STRANDED_CAR_POS, radius=brt_config.L, color='r' , alpha=0.5
+        )
 
-        # gfxdraw.filled_circle(
-        #     self.surf,
-        #     ww2sw(self.car.x[0]),
-        #     wh2sh(self.car.x[1]),
-        #     world_to_screen(self.car.r),
-        #     (255, 255, 0) if self.used_hj else (0, 0, 255),
-        # )
+        self.ax.add_patch(stranded_car_unsafe)
 
-        # gfxdraw.line(
-        #     self.surf,
-        #     ww2sw(self.car.x[0]),
-        #     wh2sh(self.car.x[1]),
-        #     ww2sw(np.cos(self.car.x[2]) * self.car.r + self.car.x[0]),
-        #     wh2sh(np.sin(self.car.x[2]) * self.car.r + self.car.x[1]),
-        #     (255, 255, 255),
-        # )
+        goal = plt.Circle(
+           brt_config.GOAL_POS, radius=brt_config.L, color='g', alpha=0.5
+        )
 
-        self.surf = pygame.transform.flip(self.surf, False, True)
-        self.screen.blit(self.surf, (0, 0))
+        self.ax.add_patch(goal)
+        '''
+        # brt
+        X, Y = np.meshgrid(
+            np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
+            np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
+        )
+
+        index = self.grid.get_index(self.state)
+        # by convention dim[0] == row == y
+        #               dim[1] == col == x
+        # want x to be dim[0], y to be dim[1] so need tranpose
+        # without it, contour is flipped along x and y axis
+        self.ax.contour(
+            X, Y, self.brt[:, :, index[2]].transpose(), levels=[0],
+        )
+        '''
+
+        self.ax.set_xlim(-8, 8)
+        self.ax.set_ylim(-4, 4)
+        self.ax.set_aspect("equal")
+        self.ax.set_xlabel("x")
+        self.ax.set_ylabel("y")
+        self.ax.autoscale_view()
+
+        self.fig.canvas.draw()
+        img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
+        img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3,))
+
         if mode == "human":
-            pygame.event.pump()
-            self.clock.tick(self.metadata["render_fps"])
-            pygame.display.flip()
-
-        if mode == "rgb_array":
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
-            )
-        else:
-            return self.isopen
+            plt.show()
+            # self.fig.canvas.flush_events()
+            #plt.pause(1 / self.metadata["render_fps"])
+        return img
 
     def close(self):
-        if not self.screen:
-            import pygame
-
-            pygame.display.quit()
-            pygame.quit()
-            self.isopen = False
+        plt.close()
+        return 
 
     def normalize_angle(self, theta):
         """normalize theta to be in range (-pi, pi]"""
@@ -404,6 +387,7 @@ if __name__ in "__main__":
     # env = RecordEpisodeStatisticsWithCost(env)
     env = SingleNarrowPassageEnv()
     obs = env.reset()
+    env.render('human')
     done = False
     while not done:
         env.render()
