@@ -100,6 +100,8 @@ class DubinsCar:
         return np.array([x_dot, y_dot, theta_dot], dtype=np.float32)
 
 
+
+
 class DubinsHallwayEnv(gym.Env):
 
     metadata = {
@@ -113,14 +115,12 @@ class DubinsHallwayEnv(gym.Env):
         use_reach_avoid=False,
         done_if_unsafe=True,
         use_disturbances=True,
-        penalize_unsafe=False,
         goal_location=np.array([-2, 2.3, 0.5]),
     ) -> None:
         self.car = DubinsCar()
         self.use_reach_avoid = use_reach_avoid
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
-        self.penalize_unsafe = penalize_unsafe
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
@@ -249,8 +249,6 @@ class DubinsHallwayEnv(gym.Env):
         ):
             if self.done_if_unsafe:
                 done = True
-            elif self.penalize_unsafe:
-                reward = self.min_reward * 2
             info["safe"] = False
             info["cost"] = 1
             info["collision"] = "lava"
@@ -286,46 +284,89 @@ class DubinsHallwayEnv(gym.Env):
         return np.copy(self.state), reward, done, info
 
     def simulate_step(self, state: np.array, action: np.array):
-        """ assume state is [x, y, theta] """
-        next_state = self.car.dynamics(0, self.car.x, action) * self.dt + state
-        next_state[0] = min(
-            max(self.left_wall + self.car.r, next_state[0]),
-            self.right_wall - self.car.r,
-        )
-        next_state[1] = min(
-            max(self.bottom_wall + self.car.r, next_state[1]),
-            self.top_wall - self.car.r,
-        )
-        next_state[2] = self.normalize_angle(next_state[2])
+        if isinstance(action, dict):
+            used_hj = action["used_hj"]
+            action = action["actions"]
+        else:
+            used_hj = False
+
+        if action.shape != (1,):
+            action = action[0]
+
+        if self.use_disturbances:
+            self.car.x = (
+                self.car.dynamics(0, self.car.x, action, disturbance=self.opt_dist())
+                * self.dt
+                + self.car.x
+            )
+        else:
+            self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
+        self.car.x[2] = self.normalize_angle(self.car.x[2])
+        state = np.copy(self.car.x)
+        # print(f"{self.state=}")
+
+        reward = -np.linalg.norm(state[:2] - self.goal_location[:2])
 
         done = False
         info = {}
-        info["cost"] = 0
+        info["used_hj"] = used_hj
         info["safe"] = True
+        info["cost"] = 0
         if self.collision_rect_circle(
             self.obstacle_location[0],
             self.obstacle_location[1],
             self.obstacle_location[2],
             self.obstacle_location[3],
-            next_state[0],
-            next_state[1],
+            self.car.x[0],
+            self.car.x[1],
             self.car.r,
         ):
             if self.done_if_unsafe:
                 done = True
-            info["cost"] = 1
             info["safe"] = False
+            info["cost"] = 1
+            info["collision"] = "lava"
+        elif not (
+            self.left_wall + self.car.r <= self.car.x[0] <= self.right_wall - self.car.r
+        ):
+            done = True
+            info["safe"] = False
+            info["cost"] = 1
+            info["collision"] = "wall"
+        elif not (
+            self.bottom_wall + self.car.r <= self.car.x[1] <= self.top_wall - self.car.r
+        ):
+            done = True
+            info["safe"] = False
+            info["cost"] = 1
+            info["collision"] = "wall"
         elif self.near_goal():
             done = True
+            reward = 100.0
             info["reach_goal"] = True
 
-        # calculate reward
-        reward = -np.linalg.norm(next_state[:2] - self.goal_location[:2])
-
         # cost is based on distance to obstacle
-        info["hj_value"] = self.grid.get_value(self.brt, next_state)
+        if self.use_reach_avoid:
+            info["hj_value"] = self.grid.get_value(self.reach_avoid_brt, state)
+        else:
+            info["hj_value"] = self.grid.get_value(self.brt, state)
 
-        return next_state, reward, done, info
+        return np.copy(state), reward, done, info
+
+    def reward_penalty(self, state: np.array, action: np.array):
+        """
+        calculate grad V dot f(x, u)
+        """
+        assert len(state.shape) == 1
+        assert len(action.shape) == 1
+
+        index = self.grid.get_index(state)
+        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+
+        # NOTE: this should probabbly be in the Car class
+        gradVdotFxu = (self.car.speed * np.cos(state[2])) * spat_deriv[0] + (self.car.speed * np.sin(state[2])) * spat_deriv[1] + spat_deriv[2] * action[0]
+
+        return gradVdotFxu
 
     def render(self, mode="human"):
         self.ax.clear()
