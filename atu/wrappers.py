@@ -44,7 +44,7 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
         self.episode_lengths += 1
         if not self.is_vector_env:
             costs = infos.get("cost", 0)
-            uses_hj = infos.get("use_hj", False)
+            uses_hj = infos.get("used_hj", False)
             safes = infos.get("safe", True)
             infos = [infos]
             dones = [dones]
