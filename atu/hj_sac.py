@@ -93,6 +93,8 @@ def parse_args():
         help="reward pentalty for hj takeover")
     parser.add_argument("--reward-shape-gradv", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use reward shaping based on gradVdotF")
+    parser.add_argument("--reward-shape-gradv-takeover", type=float, default=0,
+        help="input for min(gradVdotF, x) (cost for using hj")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Reset if unsafe, use min_reward / (1 - dicount facor")
     parser.add_argument("--fake-next-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -120,9 +122,10 @@ def make_env(args, seed, capture_video, idx, run_name, eval=False):
                     env = gym.wrappers.RecordVideo(env, f"videos_eval/{run_name}")
                 else:
                     env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        env = gym.wrappers.TransformObservation(
-            env, lambda obs: obs / env.world_boundary
-        )
+
+        # env = gym.wrappers.TransformObservation(
+        #     env, lambda obs: obs / env.world_boundary
+        # )
         # env = gym.wrappers.NormalizeReward(env)
         # env = gym.wrappers.NormalizeObservation(env)
         env.seed(seed)
@@ -232,7 +235,6 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-
     # env setup
     envs = gym.vector.SyncVectorEnv(
         [
@@ -306,7 +308,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     def eval_policy(envs, actor, episodes=10):
-        print('eval policy')
+        print("eval policy")
         actor.eval()
         total_episodic_return = 0
         total_episodic_cost = 0
@@ -429,18 +431,39 @@ if __name__ == "__main__":
             reward_shape_actions = copy.deepcopy(actions)
             reward_shape_rewards = copy.deepcopy(rewards)
             for idx, og_action in og_actions:
-                sim_next_obs, sim_rew, sim_done, sim_info = envs.envs[idx].simulate_step(np.copy(obs[idx]), og_action)
+                sim_next_obs, sim_rew, sim_done, sim_info = envs.envs[
+                    idx
+                ].simulate_step(np.copy(obs[idx]), og_action)
                 # rescale obseration
-                sim_next_obs /= envs.envs[idx].world_boundary
+                # sim_next_obs /= envs.envs[idx].world_boundary
+
+                # # DEBUG
+                # dbg_next_obs, dbg_rew, dbg_done, db_info = envs.envs[idx].simulate_step(
+                #     np.copy(obs[idx]), actions[idx]
+                # )
+                # # # dbg_next_obs /= envs.envs[idx].world_boundary
+                # if not np.allclose(dbg_next_obs, real_next_obs[idx]):
+                #     print(dbg_next_obs)
+                #     print(real_next_obs[idx])
+                #     breakpoint()
+                # assert np.all(dbg_next_obs == real_next_obs[idx]), print(
+                #     dbg_next_obs, real_next_obs[idx]
+                # )
+                # # DEBUG
+
                 reward_shape_actions[idx] = og_action
                 if args.reward_shape_gradv:
                     gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
                     # min(gardVdotFxu, 0) since there shouldn't be a penalty for taking a safe action
-                    cost = args.reward_shape_penalty * min(gradVdotFxu, 0)
+                    # adding args.reward_shape_gradv_takeover since not penalizing for using hj
+                    # isn't desincentivising agent from learning how to take unsafe action
+                    cost = args.reward_shape_penalty * min(
+                        gradVdotFxu, args.reward_shape_gradv_takeover
+                    )
                     assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
                     reward_shape_rewards[idx] += cost
                 else:
-                    # previously had a bug of 
+                    # previously had a bug of
                     # reward_shape_rewards[idx] -= envs.envs[idx].min_reward # bad since min_reward was negative
                     reward_shape_rewards[idx] += -args.reward_shape_penalty
 
@@ -464,12 +487,16 @@ if __name__ == "__main__":
                     infos,
                 )
 
-
         if args.use_ra:
             breakpoint()
             opt_ctrl = np.array([env.opt_ctrl() for env in envs.envs], dtype=np.float32)
             rb_reach_avoid.add(
-                obs, real_next_obs, opt_ctrl, rewards, dones, infos,
+                obs,
+                real_next_obs,
+                opt_ctrl,
+                rewards,
+                dones,
+                infos,
             )
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
