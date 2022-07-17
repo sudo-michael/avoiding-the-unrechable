@@ -28,11 +28,17 @@
 # python atu/sac.py --track --use-hj --dist --haco --capture-video --sample-uniform
 # python atu/sac.py --track --use-hj --dist --haco --capture-video --sample-uniform --reward-shape
 # python atu/sac.py --track --use-hj --dist --capture-video --sample-uniform --reward-shape
-#for i in {1..5}
-# do
-#     echo "use hj reward shape run $i"
-#     python atu/sac.py --track --use-hj --reward-shape --group-name hjrs  --seed $i
-# done
+for i in {1..3}
+do
+    echo "use hj reward shape run with gradvdotf $i"
+    python atu/hj_sac.py --track --use-hj --reward-shape --group-name hjrs-gradvdotf  --seed $i
+done
+
+for i in {1..3}
+do
+    echo "use hj reward shape run with gradvdotf $i"
+    python atu/hj_sac.py --track --use-hj --reward-shape --group-name hjrs-gradvdotf  --reward-shape-penalty=20  --seed $i
+done
 
 # for i in {1..5}
 # do
@@ -40,8 +46,8 @@
 #     python atu/lag_sac.py --track --group-name lag_sac_2  --seed $i
 # done
 
-for i in {1..5}
-do
-    echo "hj rs $1"
-    python atu/sac.py --track --group-name hjrs_3  --use-hj --reward-shape --seed $i 
-done
+# for i in {1..5}
+# do
+#     echo "hj rs $1"
+#     python atu/sac.py --track --group-name hjrs_3  --use-hj --reward-shape --seed $i 
+# done

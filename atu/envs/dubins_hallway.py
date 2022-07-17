@@ -294,15 +294,10 @@ class DubinsHallwayEnv(gym.Env):
             action = action[0]
 
         if self.use_disturbances:
-            self.car.x = (
-                self.car.dynamics(0, self.car.x, action, disturbance=self.opt_dist())
-                * self.dt
-                + self.car.x
-            )
+                state = self.car.dynamics(0, state, action, disturbance=self.opt_dist()) * self.dt + state
         else:
-            self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
-        self.car.x[2] = self.normalize_angle(self.car.x[2])
-        state = np.copy(self.car.x)
+            state = self.car.dynamics(0, state, action) * self.dt + state
+        state[2] = self.normalize_angle(state[2])
         # print(f"{self.state=}")
 
         reward = -np.linalg.norm(state[:2] - self.goal_location[:2])
