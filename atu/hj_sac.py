@@ -31,13 +31,13 @@ def parse_args():
         help="group name of this experiment")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="atu",
+    parser.add_argument("--wandb-project-name", type=str, default="atu2",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
@@ -91,8 +91,12 @@ def parse_args():
         help="pentalty for bad actions")
     parser.add_argument("--reward-shape-penalty", type=float, default=9.4069,
         help="reward pentalty for hj takeover")
+    parser.add_argument("--reward-shape-gradv", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Use reward shaping based on gradVdotF")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Reset if unsafe, use min_reward / (1 - dicount facor")
+    parser.add_argument("--fake-next-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Use real_next_obs instead of sim step")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -373,7 +377,6 @@ if __name__ == "__main__":
 
         for info in infos:
             if info.get("cost", 0) or not info.get("safe", True):
-                print(info)
                 print(f"safety violation: {obs}")
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
@@ -404,6 +407,9 @@ if __name__ == "__main__":
                     "charts/total_cost", info["episode"]["tc"], global_step
                 )
                 writer.add_scalar(
+                    "charts/total_use_hj", info["episode"]["thj"], global_step
+                )
+                writer.add_scalar(
                     "charts/total_unsafe", info["episode"]["tus"], global_step
                 )
                 writer.add_scalar(
@@ -423,25 +429,41 @@ if __name__ == "__main__":
             reward_shape_actions = copy.deepcopy(actions)
             reward_shape_rewards = copy.deepcopy(rewards)
             for idx, og_action in og_actions:
-                sim_next_obs, sim_rew, sim_done, sim_info = envs.envs[idx].simulate_step(obs[idx], og_action)
-                gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
+                sim_next_obs, sim_rew, sim_done, sim_info = envs.envs[idx].simulate_step(np.copy(obs[idx]), og_action)
+                # rescale obseration
+                sim_next_obs /= envs.envs[idx].world_boundary
                 reward_shape_actions[idx] = og_action
-                # previously had a bug of 
-                # reward_shape_rewards[idx] -= envs.envs[idx].min_reward # bad since min_reward was negative
-                # min(gardVdotFxu, 0) since there shouldn't be a penalty for taking a safe action
-                cost = args.reward_shape_penalty * min(gradVdotFxu, 0)
-                assert cost < 0, f"{cost=} must be negative: {gradVdotFxu=}"
-                reward_shape_rewards[idx] += cost
+                if args.reward_shape_gradv:
+                    gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
+                    # min(gardVdotFxu, 0) since there shouldn't be a penalty for taking a safe action
+                    cost = args.reward_shape_penalty * min(gradVdotFxu, 0)
+                    assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
+                    reward_shape_rewards[idx] += cost
+                else:
+                    # previously had a bug of 
+                    # reward_shape_rewards[idx] -= envs.envs[idx].min_reward # bad since min_reward was negative
+                    reward_shape_rewards[idx] += -args.reward_shape_penalty
 
             # since only 1 instance, just wrapping everything in lists
-            rb.add(
-                obs,
-                [sim_next_obs],
-                reward_shape_actions,
-                reward_shape_rewards,
-                dones,
-                infos,
-            )
+            if args.fake_next_obs:
+                rb.add(
+                    obs,
+                    real_next_obs,
+                    reward_shape_actions,
+                    reward_shape_rewards,
+                    dones,
+                    infos,
+                )
+            else:
+                rb.add(
+                    obs,
+                    [sim_next_obs],
+                    reward_shape_actions,
+                    reward_shape_rewards,
+                    dones,
+                    infos,
+                )
+
 
         if args.use_ra:
             breakpoint()
