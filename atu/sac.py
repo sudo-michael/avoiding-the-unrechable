@@ -675,7 +675,6 @@ if __name__ == "__main__":
             if d:
                 real_next_obs[idx] = infos[idx]["terminal_observation"]
         rb.add(obs, real_next_obs, actions, rewards, costs, dones, infos)
-
         if args.haco:
             # replace replaced actions with original actions
             original_actions = copy.deepcopy(actions)
