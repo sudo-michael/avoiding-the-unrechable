@@ -100,8 +100,6 @@ class DubinsCar:
         return np.array([x_dot, y_dot, theta_dot], dtype=np.float32)
 
 
-
-
 class DubinsHallwayEnv(gym.Env):
 
     metadata = {
@@ -294,7 +292,13 @@ class DubinsHallwayEnv(gym.Env):
             action = action[0]
 
         if self.use_disturbances:
-                state = self.car.dynamics(0, state, action, disturbance=self.opt_dist()) * self.dt + state
+            state = (
+                self.car.dynamics(
+                    0, state, action, disturbance=self.opt_dist(state=state)
+                )
+                * self.dt
+                + state
+            )
         else:
             state = self.car.dynamics(0, state, action) * self.dt + state
         state[2] = self.normalize_angle(state[2])
@@ -312,8 +316,8 @@ class DubinsHallwayEnv(gym.Env):
             self.obstacle_location[1],
             self.obstacle_location[2],
             self.obstacle_location[3],
-            self.car.x[0],
-            self.car.x[1],
+            state[0],
+            state[1],
             self.car.r,
         ):
             if self.done_if_unsafe:
@@ -322,14 +326,14 @@ class DubinsHallwayEnv(gym.Env):
             info["cost"] = 1
             info["collision"] = "lava"
         elif not (
-            self.left_wall + self.car.r <= self.car.x[0] <= self.right_wall - self.car.r
+            self.left_wall + self.car.r <= state[0] <= self.right_wall - self.car.r
         ):
             done = True
             info["safe"] = False
             info["cost"] = 1
             info["collision"] = "wall"
         elif not (
-            self.bottom_wall + self.car.r <= self.car.x[1] <= self.top_wall - self.car.r
+            self.bottom_wall + self.car.r <= state[1] <= self.top_wall - self.car.r
         ):
             done = True
             info["safe"] = False
@@ -359,7 +363,11 @@ class DubinsHallwayEnv(gym.Env):
         spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
 
         # NOTE: this should probabbly be in the Car class
-        gradVdotFxu = (self.car.speed * np.cos(state[2])) * spat_deriv[0] + (self.car.speed * np.sin(state[2])) * spat_deriv[1] + spat_deriv[2] * action[0]
+        gradVdotFxu = (
+            (self.car.speed * np.cos(state[2])) * spat_deriv[0]
+            + (self.car.speed * np.sin(state[2])) * spat_deriv[1]
+            + spat_deriv[2] * action[0]
+        )
 
         return gradVdotFxu
 
@@ -401,7 +409,10 @@ class DubinsHallwayEnv(gym.Env):
         # want x to be dim[0], y to be dim[1] so need tranpose
         # without it, contour is flipped along x and y axis
         self.ax.contour(
-            X, Y, self.brt[:, :, index[2]].transpose(), levels=[0],
+            X,
+            Y,
+            self.brt[:, :, index[2]].transpose(),
+            levels=[0],
         )
 
         self.ax.set_xlim(-5, 5)
@@ -454,7 +465,7 @@ class DubinsHallwayEnv(gym.Env):
         dx = dist_x - width / 2
         dy = dist_y - height / 2
 
-        return dx ** 2 + dy ** 2 <= radius ** 2
+        return dx**2 + dy**2 <= radius**2
 
     def near_goal(self):
         return (
@@ -469,14 +480,16 @@ class DubinsHallwayEnv(gym.Env):
         opt_ctrl = self.car.opt_ctrl(0, self.state, spat_deriv)
         return opt_ctrl
 
-    def opt_dist(self):
-        index = self.grid.get_index(self.state)
+    def opt_dist(self, state=None):
+        if state is None:
+            state = self.state
+        index = self.grid.get_index(state)
         # always use from max over min?
         # spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
         spat_deriv = spa_deriv(
             index, self.max_over_min_brt, self.grid, periodic_dims=[2]
         )
-        opt_dist = self.car.opt_dist(0, self.state, spat_deriv)
+        opt_dist = self.car.opt_dist(0, state, spat_deriv)
         return opt_dist
 
     def safe_ctrl(self):
