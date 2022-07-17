@@ -28,17 +28,29 @@
 # python atu/sac.py --track --use-hj --dist --haco --capture-video --sample-uniform
 # python atu/sac.py --track --use-hj --dist --haco --capture-video --sample-uniform --reward-shape
 # python atu/sac.py --track --use-hj --dist --capture-video --sample-uniform --reward-shape
-for i in {1..3}
-do
-    echo "use hj reward shape run with gradvdotf $i"
-    python atu/hj_sac.py --track --use-hj --reward-shape --group-name hjrs-gradvdotf  --seed $i
-done
+# for i in {1..3}
+# do
+#     echo "use hj reward shape run with gradvdotf $i"
+#     python atu/hj_sac.py --track --use-hj --reward-shape --group-name hjrs-gradvdotf-20-2  --reward-shape-penalty=20  --seed $i
+# done
 
-for i in {1..3}
-do
-    echo "use hj reward shape run with gradvdotf $i"
-    python atu/hj_sac.py --track --use-hj --reward-shape --group-name hjrs-gradvdotf  --reward-shape-penalty=20  --seed $i
-done
+# for i in {1..3}
+# do
+#     echo "use hj reward shape run with gradvdotf $i"
+#     python atu/hj_sac.py --track --use-hj --reward-shape --group-name hjrs-gradvdotf-2  --seed $i
+# done
+
+# for i in {1..3}
+# do
+#     echo "use hj reward shape run with gradvdotf $i"
+#     python atu/hj_sac.py --track --use-hj --reward-shape --group-name hjrs-gradvdotf-2-2  --reward-shape-penalty=2 --seed $i
+# done
+
+# for i in {1..3}
+# do
+#     echo "use hj reward shape run with gradvdotf $i"
+#     python atu/hj_sac.py --track --use-hj --reward-shape --group-name 2timesminreward --reward-shape-penalty=0 --seed $i
+# done
 
 # for i in {1..5}
 # do
@@ -50,4 +62,32 @@ done
 # do
 #     echo "hj rs $1"
 #     python atu/sac.py --track --group-name hjrs_3  --use-hj --reward-shape --seed $i 
+#     python atu/sac.py --track --group-name hjrs_3  --use-hj --reward-shape --seed $i 
 # done
+
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --total-timesteps 150_000 --gamma 0.9
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 5 --group-name rsp-fake --fake-next-obs
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 10 --group-name rsp-fake --fake-next-obs
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 15 --group-name rsp-fake --fake-next-obs
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 20 --group-name rsp-fake --fake-next-obs
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 25 --group-name rsp-fake --fake-next-obs
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 40 --group-name rsp-fake --fake-next-obs
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 100 --group-name rsp-fake --fake-next-obs
+
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 5 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 10 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 15 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 20 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 25 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 40 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 100 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 10 --group-name rsp-fake --fake-next-obs
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 150 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 200 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 250 --group-name rsp
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 500 --group-name rsp
+python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-grav-takeover -0.1 --group-name gvr
+python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-grav-takeover -0.2 --group-name gvr
+python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-grav-takeover -0.3 --group-name gvr
+python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-grav-takeover -0.4 --group-name gvr
+
