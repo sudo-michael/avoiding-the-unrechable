@@ -86,8 +86,8 @@
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 200 --group-name rsp
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 250 --group-name rsp
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 500 --group-name rsp
-python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-grav-takeover -0.1 --group-name gvr
-python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-grav-takeover -0.2 --group-name gvr
-python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-grav-takeover -0.3 --group-name gvr
-python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-grav-takeover -0.4 --group-name gvr
+python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.1 --group-name gvr
+python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.2 --group-name gvr
+python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.3 --group-name gvr
+python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.4 --group-name gvr
 
