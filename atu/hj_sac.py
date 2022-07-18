@@ -96,7 +96,7 @@ def parse_args():
     parser.add_argument("--reward-shape-gradv-takeover", type=float, default=-0.5,
         help="input for min(gradVdotF, x) (cost for using hj")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Reset if unsafe, use min_reward / (1 - dicount facor")
+        help="Reset if unsafe")
     parser.add_argument("--fake-next-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use real_next_obs instead of sim step")
     parser.add_argument("--train-dist", type=float, default=0.1,
