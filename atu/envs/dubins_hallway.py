@@ -18,6 +18,7 @@ class DubinsCar:
         u_mode="max",
         d_mode="min",
     ):
+        print(f"car: {d_min=}, {d_max=} {speed=}")
         self.x = x_0
         self.w_max = w_max  # turn rate
         self.speed = speed
@@ -114,8 +115,10 @@ class DubinsHallwayEnv(gym.Env):
         done_if_unsafe=True,
         use_disturbances=True,
         goal_location=np.array([-2, 2.3, 0.5]),
+        dist=0.1,
+        speed=1,
     ) -> None:
-        self.car = DubinsCar()
+        # self.car = DubinsCar()
         self.use_reach_avoid = use_reach_avoid
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
@@ -134,14 +137,15 @@ class DubinsHallwayEnv(gym.Env):
                 os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
             )
         else:
-            self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
+            # self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
             if self.use_disturbances:
                 print("use dist")
                 self.car = DubinsCar(
                     u_mode="max",
                     d_mode="min",
-                    d_min=[-0.1, -0.1, -0.1],
-                    d_max=[0.1, 0.1, 0.1],
+                    d_min=[-dist, -dist, -dist],
+                    d_max=[dist, dist, dist],
+                    speed=speed,
                 )
                 print("max over min brt with disturbances")
                 self.max_over_min_brt = np.load(
