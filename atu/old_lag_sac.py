@@ -1,12 +1,9 @@
-# https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/sac_continuous_action.py
-# commit: 15df5c0eeb3459cc5b3dadd722751a80261c4a5e
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/sac/#sac_continuous_actionpy
 import argparse
 import os
 import random
 import time
 from distutils.util import strtobool
-import copy
 
 import gym
 import numpy as np
@@ -14,12 +11,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from stable_baselines3.common.buffers import ReplayBuffer
-from cost_buffer import CostReplayBuffer
-from torch.utils.tensorboard import SummaryWriter
 
+# from stable_baselines3.common.buffers import ReplayBuffer
 import atu
+from atu.cost_buffer import CostReplayBuffer
 from atu.wrappers import RecordEpisodeStatisticsWithCost
+
+from torch.utils.tensorboard import SummaryWriter
 
 
 def parse_args():
@@ -27,24 +25,28 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
-    parser.add_argument("--group-name", type=str, default="",
+    parser.add_argument("--group-name", type=str,
         help="group name of this experiment")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="atu2",
+    parser.add_argument("--wandb-project-name", type=str, default="atu",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
-    parser.add_argument("--eval-every", type=int, default=5_000,
-        help="Eval every x steps")
+    parser.add_argument("--eval-every", type=int, default=20_000,
+        help="Eval")
+    parser.add_argument("--dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="Use dist in env")
+    parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="Reset if unsafe")
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
@@ -53,18 +55,10 @@ def parse_args():
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=100_000,
         help="the replay memory buffer size")
-    parser.add_argument("--reach-avoid-buffer-size", type=int, default=10_000,
-        help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
-    parser.add_argument("--safe-gamma", type=float, default=0.7,
-        help="the discount factor safe-gamma")
-    parser.add_argument("--risk-threshold", type=float, default=0.1,
-        help="critic must be this sure action is safe")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
-    parser.add_argument("--max-grad-norm", type=float, default=0.5,
-        help="the maximum norm for the gradient clipping")
     parser.add_argument("--batch-size", type=int, default=256,
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
@@ -85,59 +79,23 @@ def parse_args():
             help="Entropy regularization coefficient.")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
+    parser.add_argument("--risk-threshold", type=float, default=0.5,
+            help="Upperbound of Safety Constraint")
     parser.add_argument("--lambda-multiplier", type=float, default=100,
             help="Lagrange Multiplier For Constraint Violations")
-    parser.add_argument("--train-dist", type=float, default=0.1,
-        help="Disturbance For Train")
-    parser.add_argument("--train-speed", type=float, default=1.0,
-        help="Disturbance For Train")
-    parser.add_argument("--eval-dist", type=float, default=0.1,
-        help="Disturbance For Eval")
-    parser.add_argument("--eval-speed", type=float, default=1.0,
-        help="Disturbance For Train")
-    parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Reset if unsafe")
-    parser.add_argument("--use-dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Use disturbances")
+
     args = parser.parse_args()
     # fmt: on
     return args
 
 
-def make_env(args, seed, capture_video, idx, run_name, eval=False):
+def make_env(env_id, seed, idx, capture_video, run_name, saute, eval=False):
     def thunk():
-        if "Hallway" in args.env_id:
-            if eval:
-                env = gym.make(
-                    args.env_id,
-                    done_if_unsafe=args.done_if_unsafe,
-                    use_disturbances=args.use_dist,
-                    dist=args.eval_dist,
-                    speed=args.eval_speed,
-                )
-            else:
-                env = gym.make(
-                    args.env_id,
-                    done_if_unsafe=args.done_if_unsafe,
-                    use_disturbances=args.use_dist,
-                    dist=args.train_dist,
-                    speed=args.train_speed,
-                )
-        else:
-            env = gym.make(args.env_id)
+        env = gym.make(env_id, done_if_unsafe=True, use_disturbances=True)
         env = RecordEpisodeStatisticsWithCost(env)
         if capture_video:
             if idx == 0:
-                if eval:
-                    env = gym.wrappers.RecordVideo(env, f"videos_eval/{run_name}")
-                else:
-                    env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-
-        # env = gym.wrappers.TransformObservation(
-        #     env, lambda obs: obs / env.world_boundary
-        # )
-        # env = gym.wrappers.NormalizeReward(env)
-        # env = gym.wrappers.NormalizeObservation(env)
+                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -178,13 +136,11 @@ class Actor(nn.Module):
         self.fc_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
         self.fc_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
         # action rescaling
-        self.register_buffer(
-            "action_scale",
-            torch.FloatTensor((env.action_space.high - env.action_space.low) / 2.0),
+        self.action_scale = torch.FloatTensor(
+            (env.action_space.high - env.action_space.low) / 2.0
         )
-        self.register_buffer(
-            "action_bias",
-            torch.FloatTensor((env.action_space.high + env.action_space.low) / 2.0),
+        self.action_bias = torch.FloatTensor(
+            (env.action_space.high + env.action_space.low) / 2.0
         )
 
     def forward(self, x):
@@ -212,6 +168,11 @@ class Actor(nn.Module):
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
+
+    def to(self, device):
+        self.action_scale = self.action_scale.to(device)
+        self.action_bias = self.action_bias.to(device)
+        return super().to(device)
 
 
 if __name__ == "__main__":
@@ -249,30 +210,84 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [
             make_env(
-                args,
-                seed=args.seed,
-                capture_video=args.capture_video,
-                idx=0,
-                run_name=run_name,
+                args.env_id,
+                args.seed,
+                0,
+                args.capture_video,
+                run_name,
+                saute=False,
+                eval=False,
             )
         ]
     )
+
     eval_envs = gym.vector.SyncVectorEnv(
         [
             make_env(
-                args,
-                seed=args.seed + 1_000,
-                capture_video=args.capture_video,
-                idx=0,
-                run_name=run_name,
+                args.env_id,
+                args.seed + 1_000,
+                1,
+                args.capture_video,
+                run_name,
+                saute=False,
                 eval=True,
             )
         ]
     )
 
+    def eval_policy(envs, actor, global_step):
+        print("eval policy")
+        actor.eval()
+        total_episodic_return = 0
+        total_episodic_cost = 0
+        total_episodic_unsafe = 0
+        total_reach_goal = 0
+        EPISODES = 10
+        for episode in range(EPISODES):
+            obs = envs.reset()
+            done = False
+            while not done:
+                with torch.no_grad():
+                    actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
+                actions = actions.cpu().numpy()
+
+                next_obs, rewards, dones, infos = envs.step(actions)
+                costs = [not info["safe"] for info in infos]
+
+                obs = next_obs
+                # TRY NOT TO MODIFY: record rewards for plotting purposes
+                for info in infos:
+                    if "episode" in info.keys():
+                        total_episodic_return += info["episode"]["r"]
+                        total_episodic_cost += info["episode"]["c"]
+                        total_episodic_unsafe += info["episode"]["us"]
+                        total_reach_goal += info.get("reach_goal", False)
+                        done = True
+                        break
+
+        writer.add_scalar("eval/return", total_episodic_return / EPISODES, global_step)
+        writer.add_scalar(
+            "eval/total_unsafe", total_episodic_unsafe / EPISODES, global_step
+        )
+        writer.add_scalar(
+            "eval/total_cost", total_episodic_cost / EPISODES, global_step
+        )
+        writer.add_scalar("eval/reach_goal", total_reach_goal / EPISODES, global_step)
+        print(
+            f"eval: average return: {total_episodic_return / EPISODES} average cost: {total_episodic_cost / EPISODES} average unsafe = {total_episodic_unsafe / EPISODES} average reach goal = {total_reach_goal / EPISODES}"
+        )
+
+        actor.train()
+
     assert isinstance(
         envs.single_action_space, gym.spaces.Box
     ), "only continuous action space is supported"
+
+    def soft_update(model, model_target):
+        for param, target_param in zip(model.parameters(), model_target.parameters()):
+            target_param.data.copy_(
+                args.tau * param.data + (1 - args.tau) * target_param.data
+            )
 
     max_action = float(envs.single_action_space.high[0])
 
@@ -286,9 +301,7 @@ if __name__ == "__main__":
     q_optimizer = optim.Adam(
         list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr
     )
-    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
-    # lag sac critic
     qf_safe_1 = SoftQNetwork(envs).to(device)
     qf_safe_2 = SoftQNetwork(envs).to(device)
     qf_safe_1_target = SoftQNetwork(envs).to(device)
@@ -298,6 +311,8 @@ if __name__ == "__main__":
     q_safe_optimizer = optim.Adam(
         list(qf_safe_1.parameters()) + list(qf_safe_2.parameters()), lr=args.q_lr
     )
+
+    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     # Automatic entropy tuning
     if args.autotune:
@@ -310,7 +325,6 @@ if __name__ == "__main__":
     else:
         alpha = args.alpha
 
-    # Automatic Lambda tuning
     log_lambda = torch.tensor(
         np.log(args.lambda_multiplier, dtype=np.float32),
         requires_grad=True,
@@ -329,47 +343,7 @@ if __name__ == "__main__":
         device,
         handle_timeout_termination=True,
     )
-
     start_time = time.time()
-
-    def eval_policy(envs, actor, episodes=10):
-        print("eval policy")
-        actor.eval()
-        total_episodic_return = 0
-        total_episodic_cost = 0
-        total_episodic_unsafe = 0
-        total_reach_goal = 0
-        for episode in range(episodes):
-            obs = envs.reset()
-            done = False
-            while not done:
-                with torch.no_grad():
-                    actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
-                actions = actions.cpu().numpy()
-                next_obs, rewards, dones, infos = envs.step(actions)
-
-                obs = next_obs
-                # TRY NOT TO MODIFY: record rewards for plotting purposes
-                for info in infos:
-                    if "episode" in info.keys():
-                        total_episodic_return += info["episode"]["r"]
-                        total_episodic_cost += info["episode"]["c"]
-                        total_episodic_unsafe += info["episode"]["us"]
-                        total_reach_goal += info.get("reach_goal", False)
-                        done = True
-                        break
-
-        print(
-            f"eval: average return: {total_episodic_return / episodes} average cost: {total_episodic_cost / episodes} average unsafe = {total_episodic_unsafe / episodes} average reach goal = {total_reach_goal / episodes}"
-        )
-        actor.train()
-
-        return {
-            "average_return": total_episodic_return / episodes,
-            "average_cost": total_episodic_cost / episodes,
-            "average_unsafe": total_episodic_unsafe / episodes,
-            "average_reach_goal": total_reach_goal / episodes,
-        }
 
     # TRY NOT TO MODIFY: start the game
     obs = envs.reset()
@@ -381,14 +355,11 @@ if __name__ == "__main__":
             )
         else:
             actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
-
             actions = actions.detach().cpu().numpy()
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        # hack to add `used_hj` to info to calculate reward + track with wrapper
-        # makes actions be of shape (1, 1), but it should really be (1,)
         next_obs, rewards, dones, infos = envs.step(actions)
-        costs = np.array([info.get("cost", 0) for info in infos], dtype=np.float32)
+        costs = np.array([info.get("cost", 0) for info in infos])
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         for info in infos:
@@ -403,26 +374,11 @@ if __name__ == "__main__":
                     "charts/episodic_length", info["episode"]["l"], global_step
                 )
                 writer.add_scalar(
-                    "charts/episodic_cost", info["episode"]["c"], global_step
-                )
-                writer.add_scalar(
-                    "charts/episodic_unsafe", info["episode"]["us"], global_step
-                )
-                writer.add_scalar(
                     "charts/percent_reach_goal", info["episode"]["prg"], global_step
-                )
-                writer.add_scalar(
-                    "charts/total_reach_goal", info["episode"]["trg"], global_step
-                )
-                writer.add_scalar(
-                    "charts/total_cost", info["episode"]["tc"], global_step
-                )
-                writer.add_scalar(
-                    "charts/total_unsafe", info["episode"]["tus"], global_step
                 )
                 break
 
-            # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
+        # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
         real_next_obs = next_obs.copy()
         for idx, d in enumerate(dones):
             if d:
@@ -455,40 +411,34 @@ if __name__ == "__main__":
                 qf_safe_2_next_target = qf_safe_2_target(
                     data.next_observations, next_state_actions
                 )
-
                 # Be optimisitic for costs
                 max_qf_safe_next_target = torch.max(
                     qf_safe_1_next_target, qf_safe_2_next_target
                 )
 
                 next_q_safe_value = data.costs.flatten() + (
-                    1 - data.costs.flatten()
-                ) * args.safe_gamma * (max_qf_safe_next_target).view(-1)
+                    1 - data.dones.flatten()
+                ) * args.gamma * (max_qf_safe_next_target).view(
+                    -1
+                )  # TODO create new arg for qf_safe
 
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
-            qf_loss = (qf1_loss + qf2_loss) / 2
+            qf_loss = qf1_loss + qf2_loss
 
             q_optimizer.zero_grad()
             qf_loss.backward()
-            nn.utils.clip_grad_norm_(
-                list(qf1.parameters()) + list(qf2.parameters()), args.max_grad_norm
-            )
             q_optimizer.step()
 
             qf_safe_1_a_values = qf_safe_1(data.observations, data.actions).view(-1)
             qf_safe_2_a_values = qf_safe_2(data.observations, data.actions).view(-1)
             qf_safe_1_loss = F.mse_loss(qf_safe_1_a_values, next_q_safe_value)
             qf_safe_2_loss = F.mse_loss(qf_safe_2_a_values, next_q_safe_value)
-            qf_safe_loss = (qf_safe_1_loss + qf_safe_2_loss) / 2
+            qf_safe_loss = qf_safe_1_loss + qf_safe_2_loss
             q_safe_optimizer.zero_grad()
             qf_safe_loss.backward()
-            nn.utils.clip_grad_norm_(
-                list(qf_safe_1.parameters()) + list(qf_safe_2.parameters()),
-                args.max_grad_norm,
-            )
             q_safe_optimizer.step()
 
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
@@ -504,24 +454,29 @@ if __name__ == "__main__":
                     qf_safe_2_pi = qf_safe_2(data.observations, pi)
                     max_qf_safe_pi = torch.max(qf_safe_1_pi, qf_safe_2_pi)
 
-                    # Objective: J(pi) s.t. Q_risk(s_t, a_t) <= epi_risk
-                    # lagrangian relaxation: max_\lambda min_\pi -Q(s_t, pi(a_t | s_t)) + \lambda * (Q_risk(s_t, a_t) - epi_risk)
-                    #   if Q_risk < epi_risk then Q_risk - epi_risk < 0 so lambda should be 0
-                    #   else if Q_risk >= epi_risk then Q_risk - epi_risk > 0 so make lambda really big
-                    # to adjust lambda do gradient decent on:
-                    # max_\lambda:  \lambda (Q_risk(s_t, a_t) - epi_risk)
-                    #   <=> min_\lambda  - lambda(Q_risk - epi_risk) = lambda(epi_risk - Q_risk)
+                    writer.add_scalar(
+                        "debug/max_qf-minus-risk",
+                        (max_qf_safe_pi - args.risk_threshold).mean().item(),
+                        global_step,
+                    )
+
                     actor_loss = (
                         (alpha * log_pi)
                         + (lambda_multiplier * (max_qf_safe_pi - args.risk_threshold))
                         - min_qf_pi
                     ).mean()
 
+                    # Objective: J(pi) s.t. Q_risk(s_t, a_t) <= epi_risk
+                    # lagrangian relaxation: max_\lambda min_\pi -Q(s_t, a_t) + \lambda(Q_risk(s_t, a_t) - epi_risk)
+                    # if Q_risk < epi_risk then Q_risk - epi_risk > 0 so lambda should be 0
+                    # else if Q_risk > epi_risk then Q_risk - epi_risk > 0 so make lambda really big
+
+                    # to adjust lambda do gradient decent on:
+                    # max_\lambda:  lambda (Q_risk(s_t, a_t) - epi_risk) <=> min_\lambda  - lambda(Q_risk - epi_risk) = lambda(epi_risk - Q_risk)
+                    # log_lambda  Q_risk -
+
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
-                    nn.utils.clip_grad_norm_(
-                        list(actor.parameters()), args.max_grad_norm
-                    )
                     actor_optimizer.step()
 
                     if args.autotune:
@@ -550,32 +505,10 @@ if __name__ == "__main__":
 
             # update the target networks
             if global_step % args.target_network_frequency == 0:
-                for param, target_param in zip(
-                    qf1.parameters(), qf1_target.parameters()
-                ):
-                    target_param.data.copy_(
-                        args.tau * param.data + (1 - args.tau) * target_param.data
-                    )
-                for param, target_param in zip(
-                    qf2.parameters(), qf2_target.parameters()
-                ):
-                    target_param.data.copy_(
-                        args.tau * param.data + (1 - args.tau) * target_param.data
-                    )
-
-                for param, target_param in zip(
-                    qf_safe_1.parameters(), qf_safe_1_target.parameters()
-                ):
-                    target_param.data.copy_(
-                        args.tau * param.data + (1 - args.tau) * target_param.data
-                    )
-
-                for param, target_param in zip(
-                    qf_safe_2.parameters(), qf_safe_2_target.parameters()
-                ):
-                    target_param.data.copy_(
-                        args.tau * param.data + (1 - args.tau) * target_param.data
-                    )
+                soft_update(qf1, qf1_target)
+                soft_update(qf2, qf2_target)
+                soft_update(qf_safe_1, qf_safe_1_target)
+                soft_update(qf_safe_2, qf_safe_2_target)
 
             if global_step % 100 == 0:
                 writer.add_scalar(
@@ -586,9 +519,10 @@ if __name__ == "__main__":
                 )
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
-                writer.add_scalar("losses/qf_loss", qf_loss.item(), global_step)
+                writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 writer.add_scalar("losses/alpha", alpha, global_step)
+                print("SPS:", int(global_step / (time.time() - start_time)))
                 writer.add_scalar(
                     "charts/SPS",
                     int(global_step / (time.time() - start_time)),
@@ -598,26 +532,13 @@ if __name__ == "__main__":
                     writer.add_scalar(
                         "losses/alpha_loss", alpha_loss.item(), global_step
                     )
-
                 writer.add_scalar("losses/lambda", lambda_multiplier, global_step)
                 writer.add_scalar(
                     "losses/lambda_loss", lambda_multiplier_loss.item(), global_step
                 )
 
         if (global_step + 1) % args.eval_every == 0:
-            stats = eval_policy(eval_envs, actor)
-            writer.add_scalar("eval/return", stats["average_return"], global_step)
-            writer.add_scalar("eval/total_unsafe", stats["average_cost"], global_step)
-            writer.add_scalar("eval/total_cost", stats["average_unsafe"], global_step)
-            writer.add_scalar(
-                "eval/reach_goal", stats["average_reach_goal"], global_step
-            )
+            eval_policy(eval_envs, actor, global_step)
 
-    stats = eval_policy(eval_envs, actor)
-    writer.add_scalar("eval/return", stats["average_return"], global_step)
-    writer.add_scalar("eval/total_unsafe", stats["average_cost"], global_step)
-    writer.add_scalar("eval/total_cost", stats["average_unsafe"], global_step)
-    writer.add_scalar("eval/reach_goal", stats["average_reach_goal"], global_step)
     envs.close()
-    eval_envs.close()
     writer.close()
