@@ -138,7 +138,7 @@ class DubinsHallwayEnv(gym.Env):
             )
         else:
             # self.car = DubinsCar(u_mode="max", d_mode="min")  # avoid obstacle
-            if self.use_disturbances:
+            if self.use_disturbances and dist > 0:
                 print("use dist")
                 self.car = DubinsCar(
                     u_mode="max",
