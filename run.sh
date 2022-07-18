@@ -96,20 +96,20 @@ python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --rewa
 
 for i in {1..3}
 do
-    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-dist 0.12 --group-name change-eval-dist
+    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-dist 0.15 --group-name change-eval-dist-015 --seed $i
 done
 
 for i in {1..3}
 do
-    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-speed 1.1 --group-name change-eval-dist
+    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-speed 1.2 --group-name change-eval-speed-12 --seed $i
 done
 
 for i in {1..3}
 do
-    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-speed 1.1 --eval-dist 0.12 --group-name change-eval-dist
+    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-speed 1.2 --eval-dist 0.15 --group-name change-eval-dist-015-eval-speed-12 --seed $i
 done
 
 for i in {1..3}
 do
-    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --train-dist 0.0 --eval-dist 0.1 --group-name change-eval-dist
+    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --train-dist 0.0 --eval-dist 0.15 --group-name change-train-dist-0-eval-dist-015 --seed $i
 done
