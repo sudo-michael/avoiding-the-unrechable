@@ -155,7 +155,12 @@ class DubinsHallwayEnv(gym.Env):
                     os.path.join(dir_path, "assets/brts/min_brt_dist.npy")
                 )
             else:
-                print("max over min brt with disturbances")
+                print("max over min brt")
+                self.car = DubinsCar(
+                    u_mode="max",
+                    d_mode="min",
+                    speed=speed,
+                )
                 self.max_over_min_brt = np.load(
                     os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
                 )
