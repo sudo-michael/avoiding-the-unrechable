@@ -500,7 +500,7 @@ if __name__ == "__main__":
                             qf_intervention_1_pi, qf_intervention_2_pi
                         ).item()
 
-                    cost = min(-max_qf_intervention_pi, 0) * min(
+                    cost = max(max_qf_intervention_pi, 0) * min(
                         gradVdotFxu, args.reward_shape_gradv_takeover
                     )
                     assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
