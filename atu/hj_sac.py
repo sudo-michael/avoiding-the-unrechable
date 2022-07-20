@@ -481,7 +481,9 @@ if __name__ == "__main__":
                     cost = args.reward_shape_penalty * min(
                         gradVdotFxu, args.reward_shape_gradv_takeover
                     )
+
                     assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
+                    writer.add_scalar("charts/reward_shape_cost", cost, global_step)
                     reward_shape_rewards[idx] += cost
                 else:
                     # previously had a bug of
