@@ -86,31 +86,30 @@
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 200 --group-name rsp
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 250 --group-name rsp
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 500 --group-name rsp
-# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.1 --group-name gvr
-# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.2 --group-name gvr
-# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.3 --group-name gvr
-# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.6 --group-name gvr
-# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.7 --group-name gvr
-# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.8 --group-name gvr
-python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.5 --group-name gvr
+# python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.1 --group-name gvr-haco
+# python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.2 --group-name gvr-haco
+# python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.3 --group-name gvr-haco
+# python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.6 --group-name gvr-haco
+# python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.7 --group-name gvr-haco
+# python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.8 --group-name gvr-haco
 
 
 # for i in {1..3}
 # do
-#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-dist 0.15 --group-name change-eval-dist-015 --seed $i
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-dist 0.15 --group-name change-eval-dist-015-haco --seed $i
 # done
 
 # for i in {1..3}
 # do
-#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-speed 1.2 --group-name change-eval-speed-12 --seed $i
+#     python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-speed 1.2 --group-name change-eval-speed-12-haco --seed $i
 # done
 
 # for i in {1..3}
 # do
-#     python atu/hj_sac.py --track --use-hj --fake-next-obs --reward-shape --reward-shape-gradv --eval-speed 1.2 --eval-dist 0.15 --group-name change-eval-dist-015-eval-speed-12-fake-obs --seed $i
+#     python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-speed 1.2 --eval-dist 0.15 --group-name change-eval-dist-015-haco-eval-speed-12 --seed $i
 # done
 
-# for i in {1..3}
-# do
-#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --train-dist 0.0 --eval-dist 0.15 --group-name change-train-dist-0-eval-dist-015 --use-dist false --seed $i 
-# done
+for i in {1..3}
+do
+    python atu/hj_haco_sac.py --track --use-hj --reward-shape --reward-shape-gradv --train-dist 0.0 --eval-dist 0.15 --group-name change-train-dist-0-eval-dist-015-haco --use-dist false --seed $i
+done
