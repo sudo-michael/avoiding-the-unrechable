@@ -22,6 +22,7 @@ def spa_deriv(index, V, g, periodic_dims=[]):
         List of left and right spatial derivatives for each dimension
 
     """
+    # print('idx:' ,index)
     spa_derivatives = []
     for dim, idx in enumerate(index):
         if dim == 0:
@@ -55,7 +56,7 @@ def spa_deriv(index, V, g, periodic_dims=[]):
                 right_boundary = V[right_periodic_boundary_index]
             else:
                 right_boundary = V[index] + np.abs(V[index] - V[prev_index]) * np.sign(
-                    [V[index]]
+                    V[index]
                 )
             left_deriv = (V[index] - V[prev_index]) / g.dx[dim]
             right_deriv = (right_boundary - V[index]) / g.dx[dim]
@@ -69,7 +70,7 @@ def spa_deriv(index, V, g, periodic_dims=[]):
 
 
 class SingleNarrowPassage:
-    def __init__(self, x=[0,0,0,0,0], alpha_max = 2.0, alpha_min=-4.0, psi_max = 3.0 * np.pi, psi_min= -3.0 * np.pi, length=2.0, u_mode="min", d_mode="max"):
+    def __init__(self, x=[0,0,0,0,0], alpha_max = 2.0, alpha_min=-4.0, psi_max = np.pi/6, psi_min= -np.pi/6, length=2.0, u_mode="min", d_mode="max"):
         self.x = x
         self.alpha_max = alpha_max
         self.alpha_min = alpha_min
@@ -137,13 +138,13 @@ class SingleNarrowPassage:
         \dot{x_4} = a  # theta  # v 
         \dot{x_5} = psi # phi (steering angle)
         """
+        x0_dot = state[3] * np.cos(state[2])
         x1_dot = state[3] * np.sin(state[2])
-        x2_dot = state[3] * np.cos(state[2])
-        x3_dot = state[3] * np.tan(state[4]) / self.length
-        x4_dot = u_opt[0]
-        x5_dot = u_opt[1]
+        x2_dot = state[3] * np.tan(state[4]) / self.length
+        x3_dot = u_opt[0]
+        x4_dot = u_opt[1]
 
-        return np.array([x1_dot, x2_dot, x3_dot, x4_dot, x5_dot])
+        return np.array([x0_dot, x1_dot, x2_dot, x3_dot, x4_dot])
 
 
 class SingleNarrowPassageEnv(gym.Env):
@@ -189,6 +190,7 @@ class SingleNarrowPassageEnv(gym.Env):
     def reset(self, seed=None):
         # self.hist.clear()
         # self.car.x = np.array(self.car.x, dtype=np.float32)
+        self.car.x = np.array([-6, -1.5, 0, 1, 0.5])
         self.state = np.copy(self.car.x)
         # # self.hist.append(np.copy(self.state))
         return np.array(self.car.x)
@@ -201,8 +203,12 @@ class SingleNarrowPassageEnv(gym.Env):
                 + self.car.x
             )
         else:
+            print(f'before: {self.car.x}')
+            print(f'dyn:    {self.car.dynamics(0, self.car.x, action)}')
             self.car.x = self.car.dynamics(0, self.car.x, action) * self.dt + self.car.x
         self.car.x[2] = self.normalize_angle(self.car.x[2])
+        self.car.x = np.clip(self.car.x, brt_config.grid_low, brt_config.grid_high)
+        print(f'after:  {self.car.x}')
 
         reward = -np.linalg.norm(self.car.x[:2] - self.goal_location)
 
@@ -210,6 +216,7 @@ class SingleNarrowPassageEnv(gym.Env):
         done = False
         info = {}
         if self.collision_curb_or_bounds():
+            print('colide curb or bounds')
             if self.done_if_unsafe:
                 done = True
             elif self.penalize_unsafe:
@@ -217,6 +224,7 @@ class SingleNarrowPassageEnv(gym.Env):
             info["cost"] = 1
             info["safe"] = False
         elif self.collision_car():
+            print('collision car')
             if self.done_if_unsafe:
                 done = True
             elif self.penalize_unsafe:
@@ -224,6 +232,7 @@ class SingleNarrowPassageEnv(gym.Env):
             info["cost"] = 1
             info["safe"] = False
         elif self.near_goal():
+            print('reach goal')
             done = True
             reward = 100.0
             info["reach_goal"] = True
@@ -267,11 +276,10 @@ class SingleNarrowPassageEnv(gym.Env):
 
         self.ax.add_patch(stranded_car)
 
-        stranded_car_unsafe = plt.Circle(
-               brt_config.STRANDED_CAR_POS, radius=brt_config.L, color='r' , alpha=0.5
-        )
-
-        self.ax.add_patch(stranded_car_unsafe)
+        # stranded_car_unsafe = plt.Circle(
+        #        brt_config.STRANDED_CAR_POS, radius=brt_config.L, color='r' , alpha=0.5
+        # )
+        # self.ax.add_patch(stranded_car_unsafe)
 
         goal = plt.Circle(
            brt_config.GOAL_POS, radius=brt_config.L, color='g', alpha=0.5
@@ -319,9 +327,9 @@ class SingleNarrowPassageEnv(gym.Env):
         return ((-theta + np.pi) % (2.0 * np.pi) - np.pi) * -1.0
 
     def collision_curb_or_bounds(self):
-        if not (brt_config.grid_low[1] + 0.5 * self.car.length <= self.state[1] <= brt_config.grid_high[1] - 0.5 * self.car.length):
+        if not (brt_config.CURB_POSITION[0] + 0.5 * self.car.length <= self.state[1] <= brt_config.CURB_POSITION[1] - 0.5 * self.car.length):
             return True
-        elif not (brt_config.grid_low[0] + self.car.length <= self.state[0] <= brt_config.grid_high[0] - self.car.length):
+        elif not (brt_config.grid_low[0] + 0.5 * self.car.length <= self.state[0] <= brt_config.grid_high[0] - 0.5 * self.car.length):
             return True
         return False
 
@@ -336,19 +344,19 @@ class SingleNarrowPassageEnv(gym.Env):
 
     def opt_ctrl(self):
         index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2, 4])
         opt_ctrl = self.car.opt_ctrl(0, self.state, spat_deriv)
         return opt_ctrl
 
     def opt_dist(self):
         index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2, 4])
         opt_dist = self.car.opt_dist(0, self.state, spat_deriv)
         return opt_dist
 
     def safe_ctrl(self):
         index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2, 4])
         return self.car.safe_ctrl(0, self.state, spat_deriv)
 
     def use_opt_ctrl(self, threshold=0.3, threshold_ra=0.2):
@@ -359,7 +367,7 @@ class SingleNarrowPassageEnv(gym.Env):
 
     def unsafe_ctrl(self):
         index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2, 4])
         return self.car.unsafe_ctrl(0, self.state, spat_deriv)
 
     @property
@@ -387,5 +395,6 @@ if __name__ in "__main__":
     while not done:
         env.render()
         opt_ctrl = env.opt_ctrl()
-        env.step(opt_ctrl)
+        obs, reward, done, info = env.step([1.0,0.5])
+        # obs, reward, done, info = env.step(env.action_space.sample())
         # time.sleep(0.4)
