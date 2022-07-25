@@ -369,6 +369,7 @@ if __name__ == "__main__":
 
     # TRY NOT TO MODIFY: start the game
     obs = envs.reset()
+    thj = 0
     for global_step in range(args.total_timesteps):
         used_hj = False
         if args.use_hj:
@@ -390,6 +391,7 @@ if __name__ == "__main__":
                         used_hj = True
                         og_actions.append((idx, copy.deepcopy(actions[idx])))
                         actions[idx] = opt_ctrl
+                        thj += 1
 
         # TRY NOT TO MODIFY: execute the game and log data.
         # hack to add `used_hj` to info to calculate reward + track with wrapper
@@ -484,6 +486,7 @@ if __name__ == "__main__":
 
                     assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
                     writer.add_scalar("charts/reward_shape_cost", cost, global_step)
+                    writer.add_scalar("charts/gradVdotFxu", gradVdotFxu, global_step)
                     reward_shape_rewards[idx] += cost
                 else:
                     # previously had a bug of
@@ -618,6 +621,8 @@ if __name__ == "__main__":
                     writer.add_scalar(
                         "losses/alpha_loss", alpha_loss.item(), global_step
                     )
+
+                writer.add_scalar("charts/thj", thj, global_step)
 
         if (global_step + 1) % args.eval_every == 0:
             stats = eval_policy(eval_envs, actor)

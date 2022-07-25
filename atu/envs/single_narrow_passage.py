@@ -120,12 +120,12 @@ class SingleNarrowPassage:
             else:
                 opt_u_psi = self.psi_max
 
-        return opt_u_alpha, opt_u_psi
+        return np.array([opt_u_alpha, opt_u_psi])
 
     def opt_dstb(self, t, state, spat_deriv):
         return np.zeros(5)
 
-    def dynamics(self, t, state, u_opt, d_opt):
+    def dynamics(self, t, state, u_opt, d_opt=np.zeros(5)):
         """
         u_opt[0] = alpha
         u_opt[1] = psi
@@ -139,11 +139,11 @@ class SingleNarrowPassage:
         """
         x1_dot = state[3] * np.sin(state[2])
         x2_dot = state[3] * np.cos(state[2])
-        x3_dot = state[3] * np.tan(4) / self.length
+        x3_dot = state[3] * np.tan(state[4]) / self.length
         x4_dot = u_opt[0]
         x5_dot = u_opt[1]
 
-        return x1_dot, x2_dot, x3_dot, x4_dot, x5_dot
+        return np.array([x1_dot, x2_dot, x3_dot, x4_dot, x5_dot])
 
 
 class SingleNarrowPassageEnv(gym.Env):
@@ -154,20 +154,17 @@ class SingleNarrowPassageEnv(gym.Env):
         self,done_if_unsafe=True, use_disturbances=False, reach_avoid=True
     ) -> None:
         self.car = SingleNarrowPassage(u_mode='min', d_mode='max')
-        self.screen = None
-        self.clock = None
-        self.isopen = True
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
         self.use_reach_avoid = reach_avoid
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        # if self.use_reach_avoid:
-        #     self.car = SingleNarrowPassage(u_mode="min", d_mode="max")  # ra
-        #     self.ra = np.load(
-        #         os.path.join(dir_path, "assets/brts/single_narrow_passage_ra.npy")
-        #     )
+        if self.use_reach_avoid:
+            self.car = SingleNarrowPassage(u_mode="min", d_mode="max")  # ra
+            self.brt = np.load(
+                os.path.join(dir_path, "assets/brts/single_narrow_passage_brt.npy")
+            )
 
         self.state = None
         self.dt = 0.05
@@ -192,7 +189,7 @@ class SingleNarrowPassageEnv(gym.Env):
     def reset(self, seed=None):
         # self.hist.clear()
         # self.car.x = np.array(self.car.x, dtype=np.float32)
-        # self.state = self.car.x
+        self.state = np.copy(self.car.x)
         # # self.hist.append(np.copy(self.state))
         return np.array(self.car.x)
 
@@ -241,6 +238,7 @@ class SingleNarrowPassageEnv(gym.Env):
         return np.copy(self.state), reward, done, info
 
     def render(self, mode="human"):
+        # self.state = np.array([0, 1, np.pi/2, 0, 0])
         self.ax.clear()
 
         # world  boundary
@@ -254,14 +252,13 @@ class SingleNarrowPassageEnv(gym.Env):
         # self.ax.hlines(y=[-2.8 + 0.5 * brt_config.L * 0.5, 2.8 - 0.5 * brt_config.L * 0.5], xmin=[-8, -8], xmax=[8, 8], color="y")
         self.ax.hlines(y=[brt_config.CURB_POSITION[0], brt_config.CURB_POSITION[1]], xmin=[-8, -8], xmax=[8, 8], color="y")
 
-        state = [-6, -1, 0]
-        robot = plt.Circle(state[:2],  radius=brt_config.L / 2, color="blue")
+        robot = plt.Circle(self.state[:2],  radius=brt_config.L / 2, color="blue")
         self.ax.add_patch(robot)
 
-        dir = state[:2] + 1 * np.array(
-            [np.cos(state[2]), np.sin(state[2])]
+        dir = self.state[:2] + 1 * np.array(
+            [np.cos(self.state[2]), np.sin(self.state[2])]
         )
-        self.ax.plot([state[0], dir[0]], [state[1], dir[1]], color="c")
+        self.ax.plot([self.state[0], dir[0]], [self.state[1], dir[1]], color="c")
 
 
         stranded_car = plt.Circle(
@@ -281,7 +278,6 @@ class SingleNarrowPassageEnv(gym.Env):
         )
 
         self.ax.add_patch(goal)
-        '''
         # brt
         X, Y = np.meshgrid(
             np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
@@ -294,9 +290,8 @@ class SingleNarrowPassageEnv(gym.Env):
         # want x to be dim[0], y to be dim[1] so need tranpose
         # without it, contour is flipped along x and y axis
         self.ax.contour(
-            X, Y, self.brt[:, :, index[2]].transpose(), levels=[0],
+            X, Y, self.brt[:, :, index[2], index[3], index[4]].transpose(), levels=[0],
         )
-        '''
 
         self.ax.set_xlim(-8, 8)
         self.ax.set_ylim(-4, 4)
@@ -310,9 +305,9 @@ class SingleNarrowPassageEnv(gym.Env):
         img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3,))
 
         if mode == "human":
-            plt.show()
-            # self.fig.canvas.flush_events()
-            #plt.pause(1 / self.metadata["render_fps"])
+            # plt.show()
+            self.fig.canvas.flush_events()
+            plt.pause(1 / self.metadata["render_fps"])
         return img
 
     def close(self):
@@ -324,19 +319,19 @@ class SingleNarrowPassageEnv(gym.Env):
         return ((-theta + np.pi) % (2.0 * np.pi) - np.pi) * -1.0
 
     def collision_curb_or_bounds(self):
-        if not (brt_config.grid_low[1] + 0.5 * self.car.r <= self.state[1] <= brt_config.grid_high[1] - 0.5 * self.car.r):
+        if not (brt_config.grid_low[1] + 0.5 * self.car.length <= self.state[1] <= brt_config.grid_high[1] - 0.5 * self.car.length):
             return True
-        elif not (brt_config.grid_low[0] + self.car.r <= self.state[0] <= brt_config.grid_high[0] - self.car.r):
+        elif not (brt_config.grid_low[0] + self.car.length <= self.state[0] <= brt_config.grid_high[0] - self.car.length):
             return True
         return False
 
-    def colision_car(self):
-        return np.norm(self.state[:2] - brt_config.STRANDED_CAR_POS) <= self.car.r 
+    def collision_car(self):
+        return np.linalg.norm(self.state[:2] - brt_config.STRANDED_CAR_POS) <= self.car.length
  
     def near_goal(self):
         return (
             np.linalg.norm(self.goal_location[:2] - self.car.x[:2])
-            <= self.car.r
+            <= self.car.length
         )
 
     def opt_ctrl(self):
@@ -385,10 +380,12 @@ if __name__ in "__main__":
     # env = gym.make("Safe-DubinsHallway-v1", use_reach_avoid=False)
     # env = TransformObservation(env, lambda obs: obs / env.world_boundary)
     # env = RecordEpisodeStatisticsWithCost(env)
-    env = SingleNarrowPassageEnv()
+    env = SingleNarrowPassageEnv(use_disturbances=False)
     obs = env.reset()
     env.render('human')
     done = False
     while not done:
         env.render()
-        time.sleep(0.4)
+        opt_ctrl = env.opt_ctrl()
+        env.step(opt_ctrl)
+        # time.sleep(0.4)
