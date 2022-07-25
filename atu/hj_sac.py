@@ -83,6 +83,8 @@ def parse_args():
         help="automatic tuning of the entropy coefficient")
     parser.add_argument("--use-hj", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use safety controller")
+    parser.add_argument("--uniform-sample-safe", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Sample uniform control")
     parser.add_argument("--use-dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Use disturbances")
     parser.add_argument("--use-ra", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -387,7 +389,10 @@ if __name__ == "__main__":
             if args.use_hj:
                 for idx, env in enumerate(envs.envs):
                     if env.use_opt_ctrl():
-                        opt_ctrl = env.opt_ctrl()
+                        if args.uniform_sample_safe:
+                            opt_ctrl = env.safe_ctrl()
+                        else:
+                            opt_ctrl = env.opt_ctrl()
                         used_hj = True
                         og_actions.append((idx, copy.deepcopy(actions[idx])))
                         actions[idx] = opt_ctrl
