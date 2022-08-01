@@ -17,7 +17,6 @@ class SingleNarrowPassageEnv(gym.Env):
     def __init__(
         self, done_if_unsafe=True, use_disturbances=False, reach_avoid=True
     ) -> None:
-        self.car = SingleNarrowPassage(u_mode="min", d_mode="max", length=1.25)
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
         self.use_reach_avoid = reach_avoid
@@ -26,12 +25,12 @@ class SingleNarrowPassageEnv(gym.Env):
         dir_path = os.path.dirname(path)
         if self.use_reach_avoid:
             print("reach avoid")
-            self.car = SingleNarrowPassage(u_mode="min", d_mode='max', length=1.25)
+            self.car = brt_config.car_ra
             self.brt = np.load(
                 os.path.join(dir_path, "assets/brts/single_narrow_passage_ra_goal_low.npy")
             )
         else:
-            self.car = SingleNarrowPassage(u_mode="max", d_mode='min', length=1.25)
+            self.car = brt_config.car_brt
             self.brt = np.load(
                 os.path.join(dir_path, "assets/brts/single_narrow_passage_brt_goal_low.npy")
             )
@@ -77,14 +76,14 @@ class SingleNarrowPassageEnv(gym.Env):
                 + self.car.x
             )
         else:
-            print(f"before: {self.car.x}")
-            print(f"dyn:    {self.car.dynamics_non_hcl(0, self.car.x, action)}")
-            print(f"action:   {action}")
+            # print(f"before: {self.car.x}")
+            # print(f"dyn:    {self.car.dynamics_non_hcl(0, self.car.x, action)}")
+            # print(f"action:   {action}")
             self.car.x = self.car.dynamics_non_hcl(0, self.car.x, action) * self.dt + self.car.x
         self.car.x[2] = self.normalize_angle(self.car.x[2])
         self.car.x = np.clip(self.car.x, brt_config.grid_low, brt_config.grid_high)
-        print(f"after:  {self.car.x}")
-        print(f"value: {self.grid.get_value(self.brt, self.car.x)}")
+        # print(f"after:  {self.car.x}")
+        # print(f"value: {self.grid.get_value(self.brt, self.car.x)}")
         self.state = np.copy(self.car.x)
 
         reward = -np.linalg.norm(self.car.x[:2] - self.goal_location)
@@ -92,7 +91,7 @@ class SingleNarrowPassageEnv(gym.Env):
         done = False
         info = {}
         if self.collision_curb_or_bounds():
-            print("colide curb or bounds")
+            print(f"colide curb or bounds, {self.state=}")
             if self.done_if_unsafe:
                 done = True
             elif self.penalize_unsafe:
@@ -100,7 +99,7 @@ class SingleNarrowPassageEnv(gym.Env):
             info["cost"] = 1
             info["safe"] = False
         elif self.collision_car():
-            print("collision car")
+            print(f"collision car: {self.state=}")
             if self.done_if_unsafe:
                 done = True
             elif self.penalize_unsafe:
@@ -265,7 +264,7 @@ class SingleNarrowPassageEnv(gym.Env):
         spat_deriv = spa_deriv(index, self.brt, self.grid)
         return self.car.safe_ctrl(0, self.state, spat_deriv)
 
-    def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.2):
+    def use_opt_ctrl(self, threshold=0.15, threshold_ra=0.2):
         if self.use_reach_avoid:
             return self.grid.get_value(self.brt, self.state) > threshold_ra
         else:
@@ -304,8 +303,9 @@ if __name__ in "__main__":
         else:
             action = env.action_space.sample()
         # print(opt_ctrl)
+        # action = env.opt_ctrl()
         obs, reward, done, info = env.step(action)
-        env.render()
+        # env.render()
         # obs, reward, done, info = env.step([-2, opt_ctrl[1]])
         # obs, reward, done, info = env.step(env.action_space.sample())
         # time.sleep(0.4)
