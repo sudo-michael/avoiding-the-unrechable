@@ -388,15 +388,20 @@ if __name__ == "__main__":
 
             if args.use_hj:
                 for idx, env in enumerate(envs.envs):
-                    if env.use_opt_ctrl():
-                        if args.uniform_sample_safe:
+                    if args.uniform_sample_safe:
+                        if env.use_opt_ctrl(threshold=0.15):
                             opt_ctrl = env.safe_ctrl()
-                        else:
+                            used_hj = True
+                            og_actions.append((idx, copy.deepcopy(actions[idx])))
+                            actions[idx] = opt_ctrl
+                            thj += 1
+                    else:
+                        if env.use_opt_ctrl():
                             opt_ctrl = env.opt_ctrl()
-                        used_hj = True
-                        og_actions.append((idx, copy.deepcopy(actions[idx])))
-                        actions[idx] = opt_ctrl
-                        thj += 1
+                            used_hj = True
+                            og_actions.append((idx, copy.deepcopy(actions[idx])))
+                            actions[idx] = opt_ctrl
+                            thj += 1
 
         # TRY NOT TO MODIFY: execute the game and log data.
         # hack to add `used_hj` to info to calculate reward + track with wrapper

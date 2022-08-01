@@ -536,8 +536,9 @@ if __name__ in "__main__":
         obs = env.reset()
         done = False
         while not done:
+            env.render()
             if env.use_opt_ctrl():
-                action = env.opt_ctrl()
+                action = env.safe_ctrl()
             else:
                 action = env.action_space.sample()
             next_obs, reward, done, info = env.step(action)

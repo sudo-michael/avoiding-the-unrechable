@@ -1,6 +1,6 @@
 import numpy as np
 
-def spa_deriv(index, V, g, periodic_dims=[]):
+def spa_deriv(index, V, g):
     """
     Calculates the spatial derivatives of V at an index for each dimension
 
@@ -30,7 +30,7 @@ def spa_deriv(index, V, g, periodic_dims=[]):
         prev_index = tuple(left_index + [index[dim] - 1] + right_index)
 
         if idx == 0:
-            if dim in periodic_dims:
+            if dim in g.pDim:
                 left_periodic_boundary_index = tuple(
                     left_index + [V.shape[dim] - 1] + right_index
                 )
@@ -42,7 +42,7 @@ def spa_deriv(index, V, g, periodic_dims=[]):
             left_deriv = (V[index] - left_boundary) / g.dx[dim]
             right_deriv = (V[next_index] - V[index]) / g.dx[dim]
         elif idx == V.shape[dim] - 1:
-            if dim in periodic_dims:
+            if dim in g.pDim:
                 right_periodic_boundary_index = tuple(left_index + [0] + right_index)
                 right_boundary = V[right_periodic_boundary_index]
             else:
