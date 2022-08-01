@@ -244,7 +244,7 @@ class SingleNarrowPassageEnv(gym.Env):
 
     def near_goal(self):
         return (
-            np.linalg.norm(self.goal_location[:2] - self.car.x[:2]) <= self.car.length
+            np.linalg.norm(self.goal_location[:2] - self.car.x[:2]) <= (self.car.length + self.car.length / 2)
         )
 
     def opt_ctrl(self):
@@ -305,7 +305,7 @@ if __name__ in "__main__":
         # print(opt_ctrl)
         # action = env.opt_ctrl()
         obs, reward, done, info = env.step(action)
-        # env.render()
+        env.render()
         # obs, reward, done, info = env.step([-2, opt_ctrl[1]])
         # obs, reward, done, info = env.step(env.action_space.sample())
         # time.sleep(0.4)
