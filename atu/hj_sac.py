@@ -47,7 +47,8 @@ def parse_args():
         help="Eval every x steps")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    parser.add_argument("--env-id", type=str, default="Safe-SingleNarrowPassage-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
@@ -410,9 +411,9 @@ if __name__ == "__main__":
             [{"used_hj": used_hj, "actions": actions}]
         )
 
-        for info in infos:
-            if info.get("cost", 0) or not info.get("safe", True):
-                print(f"safety violation: {obs}")
+        # for info in infos:
+        #     if info.get("cost", 0) or not info.get("safe", True):
+        #         print(f"safety violation: {obs}")
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         for info in infos:
