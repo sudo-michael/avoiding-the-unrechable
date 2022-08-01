@@ -22,9 +22,9 @@ register(
 )
 
 register(
-    id="SingleNarrowPassage-v0",
+    id="Safe-SingleNarrowPassage-v0",
     entry_point="atu.envs:SingleNarrowPassageEnv",
-    max_episode_steps=250,
+    max_episode_steps=600,
 )
 
 # register(
