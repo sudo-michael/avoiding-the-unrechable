@@ -369,7 +369,7 @@ class DubinsHallwayEnv(gym.Env):
         assert len(action.shape) == 1
 
         index = self.grid.get_index(state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(index, self.brt, self.grid)
 
         # NOTE: this should probabbly be in the Car class
         gradVdotFxu = (
@@ -485,7 +485,7 @@ class DubinsHallwayEnv(gym.Env):
     def opt_ctrl(self):
         index = self.grid.get_index(self.state)
         brt = self.reach_avoid_brt if self.use_reach_avoid else self.max_over_min_brt
-        spat_deriv = spa_deriv(index, brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(index, brt, self.grid)
         opt_ctrl = self.car.opt_ctrl(0, self.state, spat_deriv)
         return opt_ctrl
 
@@ -496,14 +496,14 @@ class DubinsHallwayEnv(gym.Env):
         # always use from max over min?
         # spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
         spat_deriv = spa_deriv(
-            index, self.max_over_min_brt, self.grid, periodic_dims=[2]
+            index, self.max_over_min_brt, self.grid
         )
         opt_dist = self.car.opt_dist(0, state, spat_deriv)
         return opt_dist
 
     def safe_ctrl(self):
         index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(index, self.brt, self.grid)
         return self.car.safe_ctrl(0, self.state, spat_deriv)
 
     def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.0):
@@ -514,7 +514,7 @@ class DubinsHallwayEnv(gym.Env):
 
     def unsafe_ctrl(self):
         index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
+        spat_deriv = spa_deriv(index, self.brt, self.grid)
         return self.car.unsafe_ctrl(0, self.state, spat_deriv)
 
     @property

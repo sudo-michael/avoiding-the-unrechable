@@ -47,8 +47,8 @@ def parse_args():
         help="Eval every x steps")
 
     # Algorithm specific arguments
-    # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
-    parser.add_argument("--env-id", type=str, default="Safe-SingleNarrowPassage-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    # parser.add_argument("--env-id", type=str, default="Safe-SingleNarrowPassage-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
@@ -82,6 +82,8 @@ def parse_args():
             help="Entropy regularization coefficient.")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
+    parser.add_argument("--scale-reward", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="Scale reward to be in range [-1, 1]")
     parser.add_argument("--use-hj", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use safety controller")
     parser.add_argument("--uniform-sample-safe", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -98,6 +100,8 @@ def parse_args():
         help="Use reward shaping based on gradVdotF")
     parser.add_argument("--reward-shape-gradv-takeover", type=float, default=-0.5,
         help="input for min(gradVdotF, x) (cost for using hj")
+    parser.add_argument("--seperate-cost", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Use reward shaping based on gradVdotF")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Reset if unsafe")
     parser.add_argument("--fake-next-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -143,8 +147,8 @@ def make_env(args, seed, capture_video, idx, run_name, eval=False):
             if idx == 0:
                 if eval:
                     env = gym.wrappers.RecordVideo(env, f"videos_eval/{run_name}")
-                else:
-                    env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+                # else:
+                #     env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
 
         # env = gym.wrappers.TransformObservation(
         #     env, lambda obs: obs / env.world_boundary
@@ -486,7 +490,15 @@ if __name__ == "__main__":
                 # # DEBUG
 
                 reward_shape_actions[idx] = og_action
-                if args.reward_shape_gradv:
+                if args.reward_shape_gradv and args.seperate_cost:
+                    gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
+                    cost = -args.reward_shape_penalty
+                    cost += min(gradVdotFxu, 0) * args.reward_shape_gradv_takeover
+                    assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
+                    writer.add_scalar("charts/reward_shape_cost", cost, global_step)
+                    writer.add_scalar("charts/gradVdotFxu", gradVdotFxu, global_step)
+                    reward_shape_rewards[idx] += cost
+                elif args.reward_shape_gradv:
                     gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
                     # min(gardVdotFxu, 0) since there shouldn't be a penalty for taking a safe action
                     # adding args.reward_shape_gradv_takeover since not penalizing for using hj

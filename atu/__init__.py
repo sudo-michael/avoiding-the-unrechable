@@ -22,6 +22,12 @@ register(
 )
 
 register(
+    id="Safe-DubinsHallway4D-v0",
+    entry_point="atu.envs:DubinsHallway4DEnv",
+    max_episode_steps=600,
+)
+
+register(
     id="Safe-SingleNarrowPassage-v0",
     entry_point="atu.envs:SingleNarrowPassageEnv",
     max_episode_steps=600,

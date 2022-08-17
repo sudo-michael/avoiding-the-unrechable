@@ -8,7 +8,6 @@ def spa_deriv(index, V, g):
         index:
         V:
         g:
-        periodic_dims:
 
     Returns:
         List of left and right spatial derivatives for each dimension

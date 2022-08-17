@@ -92,9 +92,49 @@
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.6 --group-name gvr
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.7 --group-name gvr
 # python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.8 --group-name gvr
-python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover -0.5 --group-name gvr
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover 100 --group-name gvr3
 
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover 100 --group-name gvvr-large-takever -seed $i
 
+# for i in {1..3}
+# do
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover 100 --group-name gvvr-large-takever --seed $i --seperate-cost
+# done
+
+# for i in {1..3}
+# do
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover 200 --group-name gvvr-large-takever --seed $i --seperate-cost
+# done
+
+# for i in {1..3}
+# do
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover 300 --group-name gvvr-large-takever --seed $i --seperate-cost
+# done
+
+# for i in {1..3}
+# do
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover 50 --group-name gvvr-large-takever --seed $i --seperate-cost
+# done
+
+# for i in {1..3}
+# do
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 10 --group-name gvvr-large-takever --seed $i
+# done
+
+# for i in {1..3}
+# do
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 25 --group-name gvvr-large-takever --seed $i
+# done
+
+# for i in {1..3}
+# do
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 50 --group-name gvvr-large-takever --seed $i --eval-dist 0.2 --eval-speed 1.2
+# done
+
+# for i in {1..3}
+# do
+#     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-penalty 100 --group-name gvvr-large-takever --seed $i --eval-dist 0.2 --eval-speed 1.2
+# done
 # for i in {1..3}
 # do
 #     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-dist 0.15 --group-name change-eval-dist-015 --seed $i
@@ -105,12 +145,14 @@ python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --rewa
 #     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --eval-speed 1.2 --group-name change-eval-speed-12 --seed $i
 # done
 
-# for i in {1..3}
-# do
+for i in {1..3}
+do
 #     python atu/hj_sac.py --track --use-hj --fake-next-obs --reward-shape --reward-shape-gradv --eval-speed 1.2 --eval-dist 0.15 --group-name change-eval-dist-015-eval-speed-12-fake-obs --seed $i
-# done
+    python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --reward-shape-gradv-takeover 50 --group-name gvvr-large-takever --seed $i --seperate-cost --eval-speed 1.2 --eval-dist 0.15
+done
 
 # for i in {1..3}
 # do
 #     python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --train-dist 0.0 --eval-dist 0.15 --group-name change-train-dist-0-eval-dist-015 --use-dist false --seed $i 
 # done
+# python atu/hj_sac.py --track --use-hj --reward-shape --reward-shape-gradv --train-dist 0.0 --eval-dist 0.15 --group-name change-train-dist-0-eval-dist-015 --use-dist false --seed $i 

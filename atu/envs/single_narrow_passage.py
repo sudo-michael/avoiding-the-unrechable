@@ -3,9 +3,9 @@ import os
 from gym.spaces import Box
 from atu.optimized_dp.Grid.GridProcessing import Grid
 import atu.optimized_dp.brt_single_narrow_passage as brt_config
-from atu.optimized_dp.dynamics.SingleNarrowPassage import SingleNarrowPassage
+# from atu.optimized_dp.dynamics.SingleNarrowPassage import SingleNarrowPassage
 import numpy as np
-import math
+# import math
 import matplotlib.pyplot as plt
 from atu.utils import spa_deriv
 
@@ -288,7 +288,7 @@ class SingleNarrowPassageEnv(gym.Env):
         return ((-theta + np.pi) % (2.0 * np.pi) - np.pi) * -1.0
 
     def collision_curb_or_bounds(self, state=None):
-        if not state:
+        if not isinstance(state, np.ndarray):
             state = self.state
         if not (
             brt_config.CURB_POSITION[0] + 0.5 * self.car.length
@@ -305,7 +305,7 @@ class SingleNarrowPassageEnv(gym.Env):
         return False
 
     def collision_car(self, state=None):
-        if not state:
+        if not isinstance(state, np.ndarray):
             state = self.state
         return (
             min(
@@ -316,7 +316,7 @@ class SingleNarrowPassageEnv(gym.Env):
         )
 
     def near_goal(self, state=None):
-        if not state:
+        if not isinstance(state, np.ndarray):
             state = self.state
         return np.linalg.norm(self.goal_location[:2] - state[:2]) <= (
             self.car.length + self.car.length / 2
@@ -353,6 +353,27 @@ class SingleNarrowPassageEnv(gym.Env):
     @property
     def min_reward(self):
         return -np.linalg.norm(self.goal_location[:2] - np.array([8.5, 3.8]))
+
+    def reward_penalty(self, state: np.array, action: np.array):
+        """
+        calculate grad V dot f(x, u)
+        """
+        # assert len(state.shape) == 1
+        # assert len(action.shape) == 1
+
+        index = self.grid.get_index(state)
+        spat_deriv = spa_deriv(index, self.brt, self.grid)
+
+        # NOTE: this should probabbly be in the Car class
+        gradVdotFxu = (
+            (state[3] * np.cos(state[2])) * spat_deriv[0] + 
+            (state[3] * np.sin(state[2])) * spat_deriv[1] +
+            (state[3] * np.tan(state[4]) / self.car.length) * spat_deriv[2] + 
+            action[0] * spat_deriv[3] + 
+            action[1] * spat_deriv[4] 
+        )
+
+        return gradVdotFxu
 
 
 if __name__ in "__main__":
