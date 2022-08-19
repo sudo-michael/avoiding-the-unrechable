@@ -529,28 +529,29 @@ if __name__ in "__main__":
 
     def run_one_episode():
         env = gym.make(
-            "Safe-DubinsHallway-v1", use_reach_avoid=False, use_disturbances=True
+            "Safe-DubinsHallway-v1", use_reach_avoid=True, use_disturbances=True
         )
 
         # env = gym.wrappers.RecordVideo(env, 'tmp/')
         obs = env.reset()
         done = False
         while not done:
-            env.render()
+            # env.render()
             if env.use_opt_ctrl():
                 action = env.safe_ctrl()
             else:
                 action = env.action_space.sample()
             next_obs, reward, done, info = env.step(action)
             if done:
+                print(info)
                 break
         steps = env._elapsed_steps
         env.close()
         return steps
 
-    from timeit import default_timer as timer
+    # from timeit import default_timer as timer
 
-    start = timer()
+    # start = timer()
     steps = run_one_episode()
-    end = timer()
-    print((end - start) / steps)
+    # end = timer()
+    # print((end - start) / steps)

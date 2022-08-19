@@ -499,7 +499,7 @@ class DubinsHallway4DEnv(gym.Env):
         return opt_dist
 
     def safe_ctrl(self):
-        print('using')
+        # print('using')
         index = self.grid.get_index(self.state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
         return self.car.opt_ctrl_non_hcl(0, self.state, spat_deriv)
@@ -558,11 +558,12 @@ if __name__ in "__main__":
     # print(obs)
     done = False
     while not done:
-        print(obs)
+        # print(obs)
         # if env.use_opt_ctrl():
         action = env.safe_ctrl()
         # else:
             # action = env.action_space.sample()
         next_obs, reward, done, info = env.step(action)
+        print(info['hj_value'])
         obs = next_obs
-        env.render()
+        # env.render()
