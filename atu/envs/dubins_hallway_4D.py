@@ -208,7 +208,8 @@ class DubinsHallway4DEnv(gym.Env):
         #     ):  # place car in location that is always possible to avoid obstacle
         #         break
 
-        self.car.x = np.array([1, 2, 1, -np.pi])
+        # self.car.x = np.array([3, 2, 1, np.pi /2])
+        self.car.x = np.array([3, -2, 1, np.pi /2])
         self.car.x = np.array(self.car.x, dtype=np.float32)
         self.state = np.copy(self.car.x)
         return np.copy(self.state)
@@ -553,7 +554,7 @@ if __name__ in "__main__":
     # end = timer()
     # print((end - start) / steps)
 
-    env = DubinsHallway4DEnv(use_reach_avoid=True, use_disturbances=False)
+    env = DubinsHallway4DEnv(use_reach_avoid=False, use_disturbances=True)
     obs = env.reset()
     # print(obs)
     done = False
@@ -566,4 +567,4 @@ if __name__ in "__main__":
         next_obs, reward, done, info = env.step(action)
         print(info['hj_value'])
         obs = next_obs
-        # env.render()
+        env.render()
