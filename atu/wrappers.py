@@ -46,6 +46,7 @@ class RecordEpisodeStatisticsWithCost(gym.Wrapper):
             costs = infos.get("cost", 0)
             uses_hj = infos.get("used_hj", False)
             safes = infos.get("safe", True)
+            # hj_value = infos.get('hj_value')
             infos = [infos]
             dones = [dones]
             self.total_cost += costs

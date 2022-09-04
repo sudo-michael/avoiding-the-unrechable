@@ -22,6 +22,7 @@ import atu
 from atu.wrappers import RecordEpisodeStatisticsWithCost
 
 
+
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
@@ -47,7 +48,8 @@ def parse_args():
         help="Eval every x steps")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway4D-v0",
     # parser.add_argument("--env-id", type=str, default="Safe-SingleNarrowPassage-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
@@ -130,6 +132,7 @@ def make_env(args, seed, capture_video, idx, run_name, eval=False):
                     use_disturbances=args.use_dist,
                     dist=args.eval_dist,
                     speed=args.eval_speed,
+                    eval=eval,
                 )
             else:
                 env = gym.make(
@@ -342,6 +345,7 @@ if __name__ == "__main__":
         total_episodic_cost = 0
         total_episodic_unsafe = 0
         total_reach_goal = 0
+        total_hj_at_collision = 0
         for episode in range(episodes):
             obs = envs.reset()
             done = False
@@ -360,7 +364,9 @@ if __name__ == "__main__":
                         total_episodic_unsafe += info["episode"]["us"]
                         total_reach_goal += info.get("reach_goal", False)
                         done = True
-                        break
+                        if not info.get('reach_goal', False) and not info.get('TimeLimit.truncated', False):
+                            total_hj_at_collision += info['hj_value']
+
 
         print(
             f"eval: average return: {total_episodic_return / episodes} average cost: {total_episodic_cost / episodes} average unsafe = {total_episodic_unsafe / episodes} average reach goal = {total_reach_goal / episodes}"
@@ -372,12 +378,15 @@ if __name__ == "__main__":
             "average_cost": total_episodic_cost / episodes,
             "average_unsafe": total_episodic_unsafe / episodes,
             "average_reach_goal": total_reach_goal / episodes,
+            "average_hj_at_collision": total_hj_at_collision / episodes,
         }
 
     # TRY NOT TO MODIFY: start the game
     obs = envs.reset()
     thj = 0
     for global_step in range(args.total_timesteps):
+
+        # envs.envs[0].render(mode='human')
         used_hj = False
         if args.use_hj:
             og_actions = []
@@ -408,12 +417,16 @@ if __name__ == "__main__":
                             actions[idx] = opt_ctrl
                             thj += 1
 
+            # print(obs, used_hj, actions, envs.envs[0].action_safe(obs[0], actions[0]))
+
         # TRY NOT TO MODIFY: execute the game and log data.
         # hack to add `used_hj` to info to calculate reward + track with wrapper
         # makes actions be of shape (1, 1), but it should really be (1,)
         next_obs, rewards, dones, infos = envs.step(
             [{"used_hj": used_hj, "actions": actions}]
         )
+
+        # print(infos[0]['hj_value'])
 
         # for info in infos:
         #     if info.get("cost", 0) or not info.get("safe", True):
@@ -455,6 +468,14 @@ if __name__ == "__main__":
                 writer.add_scalar(
                     "charts/total_use_hj", info["episode"]["thj"], global_step
                 )
+
+                # if not reach goal 
+                if not info.get('reach_goal', False) and dones[0] and not info.get('TimeLimit.truncated', False):
+                    print(obs)
+                    print('collision')
+                    writer.add_scalar(
+                        "charts/hj_at_collision", info["hj_value"], global_step
+                    )
                 break
 
             # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
@@ -514,7 +535,9 @@ if __name__ == "__main__":
                 else:
                     # previously had a bug of
                     # reward_shape_rewards[idx] -= envs.envs[idx].min_reward # bad since min_reward was negative
-                    reward_shape_rewards[idx] += -args.reward_shape_penalty
+                    cost = -args.reward_shape_penalty
+                    reward_shape_rewards[idx] += cost
+                    writer.add_scalar("charts/reward_shape_cost", cost, global_step)
 
             # since only 1 instance, just wrapping everything in lists
             if args.fake_next_obs:
@@ -537,7 +560,6 @@ if __name__ == "__main__":
                 )
 
         if args.use_ra:
-            breakpoint()
             opt_ctrl = np.array([env.opt_ctrl() for env in envs.envs], dtype=np.float32)
             rb_reach_avoid.add(
                 obs,
@@ -655,12 +677,18 @@ if __name__ == "__main__":
             writer.add_scalar(
                 "eval/reach_goal", stats["average_reach_goal"], global_step
             )
+            writer.add_scalar(
+                "eval/hj_at_collision", stats["average_hj_at_collision"], global_step
+            )
 
     stats = eval_policy(eval_envs, actor)
     writer.add_scalar("eval/return", stats["average_return"], global_step)
     writer.add_scalar("eval/total_unsafe", stats["average_cost"], global_step)
     writer.add_scalar("eval/total_cost", stats["average_unsafe"], global_step)
     writer.add_scalar("eval/reach_goal", stats["average_reach_goal"], global_step)
+    writer.add_scalar(
+        "eval/hj_at_collision", stats["average_hj_at_collision"], global_step
+    )
     envs.close()
     eval_envs.close()
     writer.close()

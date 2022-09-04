@@ -8,100 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# class DubinsCar:
-#     def __init__(
-#         self,
-#         x_0=np.array([0, 0, 0]),
-#         w_max=1.5,
-#         speed=1,
-#         d_min=[0, 0, 0],
-#         d_max=[0, 0, 0],
-#         u_mode="max",
-#         d_mode="min",
-#     ):
-#         print(f"car: {d_min=}, {d_max=} {speed=}")
-#         self.x = x_0
-#         self.w_max = w_max  # turn rate
-#         self.speed = speed
-#         self.d_min = d_min
-#         self.d_max = d_max
-#         self.u_mode = u_mode
-#         self.d_mode = d_mode
-#         self.r = 0.2
-
-#     def opt_ctrl(self, t, state, spat_deriv):
-#         opt_w = None
-#         if spat_deriv[2] >= 0:
-#             if self.u_mode == "max":
-#                 opt_w = self.w_max
-#             else:
-#                 opt_w = -self.w_max
-#         elif spat_deriv[2] <= 0:
-#             if self.u_mode == "max":
-#                 opt_w = -self.w_max
-#             else:
-#                 opt_w = self.w_max
-
-#         return np.array([opt_w])
-
-#     def safe_ctrl(self, t, state, spat_deriv, uniform_sample=True):
-#         opt_w = self.w_max
-#         if spat_deriv[2] > 0:
-#             if self.u_mode == "min":
-#                 opt_w = -opt_w
-#         elif spat_deriv[2] < 0:
-#             if self.u_mode == "max":
-#                 opt_w = -opt_w
-#         b = (self.speed * np.cos(state[2])) * spat_deriv[0] + (
-#             self.speed * np.sin(state[2])
-#         ) * spat_deriv[1]
-#         # print('gradVdotF: ', b + opt_w * spat_deriv[2])
-#         m = spat_deriv[2]
-#         x_intercept = -b / (m + 1e-5)
-#         if np.sign(m) == 1:
-#             w_upper = opt_w
-#             w_lower = max(x_intercept, -self.w_max)
-#         elif np.sign(m) == -1:
-#             w_upper = min(x_intercept, self.w_max)
-#             w_lower = -self.w_max
-#         else:
-#             w_lower = opt_w
-#             w_upper = opt_w
-#         if uniform_sample:
-#             return np.random.uniform(w_lower, w_upper, size=(1,))
-#         return np.array([w_lower, w_upper])
-
-#     def unsafe_ctrl(self, t, state, spat_deriv, uniform_sample=True):
-#         safe_ctrl_bounds = self.safe_ctrl(t, state, spat_deriv, uniform_sample=False)
-#         for _ in range(100):
-#             ctrl = np.random.uniform(-self.w_max, self.w_max)
-#             if not (safe_ctrl_bounds[0] <= ctrl <= safe_ctrl_bounds[1]):
-#                 break
-#         return np.array([ctrl])
-
-#     def opt_dist(self, t, state, spat_deriv):
-#         d_opt = np.zeros(3)
-#         if self.d_mode == "max":
-#             for i in range(3):
-#                 if spat_deriv[i] >= 0:
-#                     d_opt[i] = self.d_max[i]
-#                 else:
-#                     d_opt[i] = self.d_min[i]
-#         elif self.d_mode == "min":
-#             for i in range(3):
-#                 if spat_deriv[i] >= 0:
-#                     d_opt[i] = self.d_min[i]
-#                 else:
-#                     d_opt[i] = self.d_max[i]
-#         return d_opt
-
-#     def dynamics(self, t, state, u_opt: np.array, disturbance: np.array = np.zeros(3)):
-#         x_dot = self.speed * np.cos(state[2]) + disturbance[0]
-#         y_dot = self.speed * np.sin(state[2]) + disturbance[1]
-#         theta_dot = u_opt[0] + disturbance[2]
-#         return np.array([x_dot, y_dot, theta_dot], dtype=np.float32)
-
-
 class DubinsHallway4DEnv(gym.Env):
 
     metadata = {
@@ -118,10 +24,12 @@ class DubinsHallway4DEnv(gym.Env):
         goal_location=np.array([-2, 2.3, 0.5]),
         dist=0.1,
         speed=1,
+        eval=False,
     ) -> None:
         self.use_reach_avoid = use_reach_avoid
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
+        self.eval = eval
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
@@ -152,7 +60,7 @@ class DubinsHallway4DEnv(gym.Env):
                 )
                 self.brt = np.load(
                     os.path.join(dir_path, "assets/brts/dubin_hallway_4D_dist_brt.npy")
-                )
+                ) 
             else:
                 print("max over min brt")
                 self.car = car_brt
@@ -165,8 +73,8 @@ class DubinsHallway4DEnv(gym.Env):
         self.dt = 0.05
 
         self.action_space = Box(
-            # low=self.car.uMin, high=self.car.uMax, dtype=np.float32, shape=(2,)
-            low=np.array([0, -np.pi/18]), high=self.car.uMax, dtype=np.float32, shape=(2,)
+            low=self.car.uMin, high=self.car.uMax, dtype=np.float32, shape=(2,)
+            # low=np.array([0, -np.pi/18]), high=self.car.uMax, dtype=np.float32, shape=(2,)
         )
 
         self.world_boundary = np.array([4.5, 4.5, np.pi, np.pi], dtype=np.float32)
@@ -196,19 +104,18 @@ class DubinsHallway4DEnv(gym.Env):
 
     def reset(self, seed=None):
         # self.hist.clear()
-        # while True:
-        #     self.car.x = np.random.uniform(
-        #         low=-self.world_boundary,
-        #         # reset in bottom left-half of map
-        #         high=np.array([0.0, -0.5, np.pi, np.pi]),
-        #     )
+        while True:
+            self.car.x = np.random.uniform(
+                low=-self.world_boundary,
+                # reset in bottom left-half of map
+                high=np.array([0.0, -0.5, np.pi, np.pi]),
+            )
 
-        #     if (
-        #         self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.2
-        #     ):  # place car in location that is always possible to avoid obstacle
-        #         break
+            if (
+                self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.2
+            ):  # place car in location that is always possible to avoid obstacle
+                break
 
-        self.car.x = np.array([1, 2, 1, -np.pi])
         self.car.x = np.array(self.car.x, dtype=np.float32)
         self.state = np.copy(self.car.x)
         return np.copy(self.state)
@@ -223,9 +130,17 @@ class DubinsHallway4DEnv(gym.Env):
         if action.shape != (2,) and action.shape != (4, ):
             action = action[0]
 
-        if self.use_disturbances:
+        if self.use_disturbances and self.eval:
             self.car.x = (
                 self.car.dynamics_non_hcl(0, self.car.x, action, self.opt_dist())
+                * self.dt
+                + self.car.x
+            )
+        elif self.use_disturbances and not self.eval:
+            dist = np.array([np.random.uniform(self.car.dMin[i], self.car.dMax[i]) 
+                        for i in range(len(self.car.dMax))])
+            self.car.x = (
+                self.car.dynamics_non_hcl(0, self.car.x, action, dist)
                 * self.dt
                 + self.car.x
             )
@@ -283,6 +198,9 @@ class DubinsHallway4DEnv(gym.Env):
         # if info["hj_value"] < 0:
         # print(f"er: {self.state}")
 
+        # if done and not info.get('reach_goal', False):
+        #     print(info['hj_value'])
+
         # self.hist.append(np.copy(self.state))
 
         return np.copy(self.state), reward, done, info
@@ -294,19 +212,28 @@ class DubinsHallway4DEnv(gym.Env):
         else:
             used_hj = False
 
-        if action.shape != (1,):
+        # TODO change for 4d and 2d hallway
+        if action.shape != (2,):
             action = action[0]
 
-        if self.use_disturbances:
-            state = (
-                self.car.dynamics(
-                    0, state, action, disturbance=self.opt_dist(state=state)
-                )
+        if self.use_disturbances and self.eval:
+            self.car.x = (
+                self.car.dynamics_non_hcl(0, self.car.x, action, self.opt_dist())
                 * self.dt
-                + state
+                + self.car.x
+            )
+        elif self.use_disturbances and not self.eval:
+            dist = np.array([np.random.uniform(self.car.dMin[i], self.car.dMax[i]) 
+                        for i in range(len(self.car.dMax))])
+            self.car.x = (
+                self.car.dynamics_non_hcl(0, self.car.x, action, dist)
+                * self.dt
+                + self.car.x
             )
         else:
-            state = self.car.dynamics(0, state, action) * self.dt + state
+            self.car.x = self.car.dynamics_non_hcl(0, self.car.x, action, [0, 0, 0, 0]) * self.dt + self.car.x
+
+
         state[3] = self.normalize_angle(state[3])
         # print(f"{self.state=}")
 
@@ -370,9 +297,10 @@ class DubinsHallway4DEnv(gym.Env):
 
         # NOTE: this should probabbly be in the Car class
         gradVdotFxu = (
-            (self.car.speed * np.cos(state[2])) * spat_deriv[0]
-            + (self.car.speed * np.sin(state[2])) * spat_deriv[1]
+            (state[2] * np.cos(state[2])) * spat_deriv[0]
+            + (state[2] * np.sin(state[2])) * spat_deriv[1]
             + spat_deriv[2] * action[0]
+            + spat_deriv[3] * state[2] * np.tan(action[1]) / self.car.length
         )
 
         return gradVdotFxu
@@ -483,7 +411,7 @@ class DubinsHallway4DEnv(gym.Env):
         index = self.grid.get_index(self.state)
         brt = self.reach_avoid_brt if self.use_reach_avoid else self.max_over_min_brt
         spat_deriv = spa_deriv(index, brt, self.grid)
-        opt_ctrl = self.car.opt_ctrl(0, self.state, spat_deriv)
+        opt_ctrl = self.car.opt_ctrl_non_hcl(0, self.state, spat_deriv)
         return opt_ctrl
 
     def opt_dist(self, state=None):
@@ -553,7 +481,7 @@ if __name__ in "__main__":
     # end = timer()
     # print((end - start) / steps)
 
-    env = DubinsHallway4DEnv(use_reach_avoid=True, use_disturbances=False)
+    env = DubinsHallway4DEnv(use_reach_avoid=False, use_disturbances=True)
     obs = env.reset()
     # print(obs)
     done = False
@@ -567,3 +495,4 @@ if __name__ in "__main__":
         print(info['hj_value'])
         obs = next_obs
         # env.render()
+    print(info)
