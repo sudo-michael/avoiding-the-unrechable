@@ -18,7 +18,7 @@ L := wheelbase of car
 """
 
 
-class DubinsCar4D2:
+class DubinsCar4D:
     def __init__(
         self,
         x=[0, 0, 0, 0],

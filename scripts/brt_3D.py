@@ -1,10 +1,8 @@
 import numpy as np
-import sys
 import odp
-sys.path.append("atu/optimized_dp")
-from atu.optimized_dp.dynamics.DubinsCar import DubinsCar
+from atu.dynamics.DubinsCar import DubinsCar
+from odp.Grid.GridProcessing import Grid
 
-from Grid.GridProcessing import Grid
 g = Grid(
     np.array([-4.5, -4.5, -np.pi]),
     np.array([4.5, 4.5, np.pi]),
@@ -14,20 +12,14 @@ g = Grid(
 )
 car_r = 0.2
 
-car_brt = DubinsCar(uMode="max", dMode="min", wMax=1.5)
-car_ra = DubinsCar(uMode="min", dMode="max", wMax=1.5)
+car_brt = DubinsCar(uMode="max", dMode="min", wMax=1.5, r=car_r)
+car_ra = DubinsCar(uMode="min", dMode="max", wMax=1.5, r=car_r)
 
 if __name__ in "__main__":
-    from Shapes.ShapesFunctions import *
-    from dynamics.DubinsCar import *
-
-    # Plot options
-    from plot_options import *
-
-    # Solver core
-    from solver import HJSolver
-
-    import math
+    from odp.Shapes.ShapesFunctions import *
+    from odp.dynamics.DubinsCar import *
+    from odp.Plots.plot_options import *
+    from odp.solver import HJSolver
 
     # lava
     Initial_value_f = ShapeRectangle(
