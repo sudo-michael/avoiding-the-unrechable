@@ -494,5 +494,4 @@ if __name__ in "__main__":
         next_obs, reward, done, info = env.step(action)
         print(info['hj_value'])
         obs = next_obs
-        # env.render()
-    print(info)
+        env.render()
