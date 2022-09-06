@@ -15,12 +15,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
-from cost_buffer import CostReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
-
 import atu
 from atu.wrappers import RecordEpisodeStatisticsWithCost
-
 
 
 def parse_args():
@@ -48,15 +45,13 @@ def parse_args():
         help="Eval every x steps")
 
     # Algorithm specific arguments
-    # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
-    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway4D-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway4D-v0",
     # parser.add_argument("--env-id", type=str, default="Safe-SingleNarrowPassage-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=100_000,
-        help="the replay memory buffer size")
-    parser.add_argument("--reach-avoid-buffer-size", type=int, default=10_000,
         help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
@@ -84,16 +79,10 @@ def parse_args():
             help="Entropy regularization coefficient.")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
-    parser.add_argument("--scale-reward", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Scale reward to be in range [-1, 1]")
     parser.add_argument("--use-hj", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use safety controller")
-    parser.add_argument("--uniform-sample-safe", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Sample uniform control")
     parser.add_argument("--use-dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Use disturbances")
-    parser.add_argument("--use-ra", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Use Reach Avoid Control")
     parser.add_argument("--reward-shape", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="pentalty for bad actions")
     parser.add_argument("--reward-shape-penalty", type=float, default=9.4069,
@@ -106,16 +95,14 @@ def parse_args():
         help="Use reward shaping based on gradVdotF")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Reset if unsafe")
-    parser.add_argument("--fake-next-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Use real_next_obs instead of sim step")
-    parser.add_argument("--train-dist", type=float, default=0.1,
-        help="Disturbance For Train")
+    parser.add_argument('--train-dist', type=lambda s: np.array([float(item) for item in s.split(',')]),
+        help="Training Disturbance")
     parser.add_argument("--train-speed", type=float, default=1.0,
-        help="Disturbance For Train")
-    parser.add_argument("--eval-dist", type=float, default=0.1,
-        help="Disturbance For Eval")
+        help="Training Speed")
+    parser.add_argument('--eval-dist', type=lambda s: np.array([float(item) for item in s.split(',')]),
+        help="Eval Disturbance")
     parser.add_argument("--eval-speed", type=float, default=1.0,
-        help="Disturbance For Train")
+        help="Eval Speed")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -123,41 +110,28 @@ def parse_args():
 
 def make_env(args, seed, capture_video, idx, run_name, eval=False):
     def thunk():
-        if "Hallway" in args.env_id:
-            if eval:
-                env = gym.make(
-                    args.env_id,
-                    use_reach_avoid=args.use_ra,
-                    done_if_unsafe=args.done_if_unsafe,
-                    use_disturbances=args.use_dist,
-                    dist=args.eval_dist,
-                    speed=args.eval_speed,
-                    eval=eval,
-                )
-            else:
-                env = gym.make(
-                    args.env_id,
-                    use_reach_avoid=args.use_ra,
-                    done_if_unsafe=args.done_if_unsafe,
-                    use_disturbances=args.use_dist,
-                    dist=args.train_dist,
-                    speed=args.train_speed,
-                )
+        if eval:
+            env = gym.make(
+                args.env_id,
+                done_if_unsafe=args.done_if_unsafe,
+                use_disturbances=args.use_dist,
+                dist=args.eval_dist,
+                speed=args.eval_speed,
+                eval=eval,
+            )
         else:
-            env = gym.make(args.env_id)
+            env = gym.make(
+                args.env_id,
+                done_if_unsafe=args.done_if_unsafe,
+                use_disturbances=args.use_dist,
+                dist=args.train_dist,
+                speed=args.train_speed,
+            )
         env = RecordEpisodeStatisticsWithCost(env)
         if capture_video:
             if idx == 0:
                 if eval:
                     env = gym.wrappers.RecordVideo(env, f"videos_eval/{run_name}")
-                # else:
-                #     env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-
-        # env = gym.wrappers.TransformObservation(
-        #     env, lambda obs: obs / env.world_boundary
-        # )
-        # env = gym.wrappers.NormalizeReward(env)
-        # env = gym.wrappers.NormalizeObservation(env)
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -277,6 +251,7 @@ if __name__ == "__main__":
             )
         ]
     )
+
     eval_envs = gym.vector.SyncVectorEnv(
         [
             make_env(
@@ -328,14 +303,6 @@ if __name__ == "__main__":
         handle_timeout_termination=True,
     )
 
-    rb_reach_avoid = ReplayBuffer(
-        args.reach_avoid_buffer_size,
-        envs.single_observation_space,
-        envs.single_action_space,
-        device,
-        handle_timeout_termination=True,
-    )
-
     start_time = time.time()
 
     def eval_policy(envs, actor, episodes=10):
@@ -346,6 +313,7 @@ if __name__ == "__main__":
         total_episodic_unsafe = 0
         total_reach_goal = 0
         total_hj_at_collision = 0
+        collision_count = 0
         for episode in range(episodes):
             obs = envs.reset()
             done = False
@@ -364,28 +332,32 @@ if __name__ == "__main__":
                         total_episodic_unsafe += info["episode"]["us"]
                         total_reach_goal += info.get("reach_goal", False)
                         done = True
-                        if not info.get('reach_goal', False) and not info.get('TimeLimit.truncated', False):
-                            total_hj_at_collision += info['hj_value']
-
+                        if not info.get("reach_goal", False) and not info.get(
+                            "TimeLimit.truncated", False
+                        ):
+                            total_hj_at_collision += info["hj_value"]
+                            collision_count += 1
 
         print(
             f"eval: average return: {total_episodic_return / episodes} average cost: {total_episodic_cost / episodes} average unsafe = {total_episodic_unsafe / episodes} average reach goal = {total_reach_goal / episodes}"
         )
         actor.train()
 
+        avg_hj = 0
+        if collision_count > 0:
+            avg_hj = total_hj_at_collision / collision_count
         return {
             "average_return": total_episodic_return / episodes,
             "average_cost": total_episodic_cost / episodes,
             "average_unsafe": total_episodic_unsafe / episodes,
             "average_reach_goal": total_reach_goal / episodes,
-            "average_hj_at_collision": total_hj_at_collision / episodes,
+            "average_hj_at_collision": avg_hj,
         }
 
     # TRY NOT TO MODIFY: start the game
     obs = envs.reset()
-    thj = 0
+    thj = 0  # wrapper didn't work
     for global_step in range(args.total_timesteps):
-
         # envs.envs[0].render(mode='human')
         used_hj = False
         if args.use_hj:
@@ -402,20 +374,12 @@ if __name__ == "__main__":
 
             if args.use_hj:
                 for idx, env in enumerate(envs.envs):
-                    if args.uniform_sample_safe:
-                        if env.use_opt_ctrl(threshold=0.15):
-                            opt_ctrl = env.safe_ctrl()
-                            used_hj = True
-                            og_actions.append((idx, copy.deepcopy(actions[idx])))
-                            actions[idx] = opt_ctrl
-                            thj += 1
-                    else:
-                        if env.use_opt_ctrl():
-                            opt_ctrl = env.opt_ctrl()
-                            used_hj = True
-                            og_actions.append((idx, copy.deepcopy(actions[idx])))
-                            actions[idx] = opt_ctrl
-                            thj += 1
+                    if env.use_opt_ctrl():
+                        opt_ctrl = env.opt_ctrl()
+                        used_hj = True
+                        og_actions.append((idx, copy.deepcopy(actions[idx])))
+                        actions[idx] = opt_ctrl
+                        thj += 1
 
             # print(obs, used_hj, actions, envs.envs[0].action_safe(obs[0], actions[0]))
 
@@ -425,12 +389,6 @@ if __name__ == "__main__":
         next_obs, rewards, dones, infos = envs.step(
             [{"used_hj": used_hj, "actions": actions}]
         )
-
-        # print(infos[0]['hj_value'])
-
-        # for info in infos:
-        #     if info.get("cost", 0) or not info.get("safe", True):
-        #         print(f"safety violation: {obs}")
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         for info in infos:
@@ -469,10 +427,12 @@ if __name__ == "__main__":
                     "charts/total_use_hj", info["episode"]["thj"], global_step
                 )
 
-                # if not reach goal 
-                if not info.get('reach_goal', False) and dones[0] and not info.get('TimeLimit.truncated', False):
-                    print(obs)
-                    print('collision')
+                if (
+                    not info.get("reach_goal", False)
+                    and dones[0]
+                    and not info.get("TimeLimit.truncated", False)
+                ):
+                    print(f"collision: f{obs=}")
                     writer.add_scalar(
                         "charts/hj_at_collision", info["hj_value"], global_step
                     )
@@ -486,7 +446,6 @@ if __name__ == "__main__":
         rb.add(obs, real_next_obs, actions, rewards, dones, infos)
 
         if args.reward_shape and len(og_actions):
-            # penalize for taking original action instead of opt ctrl
             reward_shape_actions = copy.deepcopy(actions)
             reward_shape_rewards = copy.deepcopy(rewards)
             for idx, og_action in og_actions:
@@ -540,32 +499,11 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/reward_shape_cost", cost, global_step)
 
             # since only 1 instance, just wrapping everything in lists
-            if args.fake_next_obs:
-                rb.add(
-                    obs,
-                    real_next_obs,
-                    reward_shape_actions,
-                    reward_shape_rewards,
-                    dones,
-                    infos,
-                )
-            else:
-                rb.add(
-                    obs,
-                    [sim_next_obs],
-                    reward_shape_actions,
-                    reward_shape_rewards,
-                    dones,
-                    infos,
-                )
-
-        if args.use_ra:
-            opt_ctrl = np.array([env.opt_ctrl() for env in envs.envs], dtype=np.float32)
-            rb_reach_avoid.add(
+            rb.add(
                 obs,
-                real_next_obs,
-                opt_ctrl,
-                rewards,
+                [sim_next_obs],
+                reward_shape_actions,
+                reward_shape_rewards,
                 dones,
                 infos,
             )

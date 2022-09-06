@@ -1,13 +1,14 @@
 import gym
 import os
 from gym.spaces import Box
-from atu.optimized_dp.brt_dubin_hallway import g as grid
-from atu.optimized_dp.brt_dubin_hallway import car_brt
+from atu.brt.brt_3D import g as grid
+from atu.brt.brt_3D import car_brt
 from atu.utils import spa_deriv
 import numpy as np
 import matplotlib.pyplot as plt
 
 # import matplotlib matplotlib.use('tkagg')
+
 
 class DubinsHallwayEnv(gym.Env):
 
@@ -19,40 +20,26 @@ class DubinsHallwayEnv(gym.Env):
 
     def __init__(
         self,
-        use_reach_avoid=False,
         done_if_unsafe=True,
         use_disturbances=True,
         goal_location=np.array([-2, 2.3, 0.5]),
-        dist=0.1,
+        dist=np.array([0.1, 0.1, 0.1]),
         speed=1,
-        eval=False
+        eval=False,
     ) -> None:
-        # self.car = DubinsCar()
-        self.use_reach_avoid = use_reach_avoid
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
         self.eval = eval
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        # if self.use_reach_avoid and self.use_disturbances:
-        #     self.car = DubinsCar(u_mode="min", d_mode="max")  # ra
-        #     print("reach avoid brt with disturbances")
-        #     self.reach_avoid_brt = np.load(
-        #         os.path.join(dir_path, "assets/brts/reach_avoid_hallway_dist.npy")
-        #     )
-
-        #     # for reseting in feasible state
-        #     self.max_over_min_brt = np.load(
-        #         os.path.join(dir_path, "assets/brts/max_over_min_brt.npy")
-        #     )
-        # else:
-        if self.use_disturbances and dist > 0:
-            print("max over min brt with disturbances")
+        if self.use_disturbances and np.any(dist) > 0:
+            print('using disturbances')
+            print(f'{dist=}')
             self.car = car_brt
             self.car.speed = speed
-            self.car.dMax = np.array([dist, dist, dist])
-            self.car.dMin = -np.array([dist, dist, dist])
+            self.car.dMax = dist
+            self.car.dMin = -dist
             self.max_over_min_brt = np.load(
                 os.path.join(dir_path, "assets/brts/max_over_min_hallway_brt_dist.npy")
             )
@@ -61,21 +48,22 @@ class DubinsHallwayEnv(gym.Env):
             )
 
         else:
+            print("not using disturbances")
             self.car = car_brt
             self.car.speed = speed
+            self.car.dMax = np.zeros(3)
+            self.car.dMin = np.zeros(3)
             self.max_over_min_brt = np.load(
                 os.path.join(dir_path, "assets/brts/max_over_min_hallway_brt.npy")
             )
             self.brt = np.load(os.path.join(dir_path, "min_hallway_brt.npy"))
 
+        print(f"wMax=", self.car.wMax)
         self.state = None
         self.dt = 0.05
-        print(f'wMax=', self.car.wMax)
-
         self.action_space = Box(
             low=-self.car.wMax, high=self.car.wMax, dtype=np.float32, shape=(1,)
         )
-
         self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
 
         self.observation_space = Box(
@@ -129,22 +117,32 @@ class DubinsHallwayEnv(gym.Env):
         if action.shape != (1,):
             action = action[0]
 
-        # print('init angle:', self.state[-1])
         if self.use_disturbances and self.eval:
             self.car.x = (
-                self.car.dynamics_non_hcl(0, self.car.x, action, disturbance=self.opt_dist())
+                self.car.dynamics_non_hcl(
+                    0, self.car.x, action, disturbance=self.opt_dist()
+                )
                 * self.dt
                 + self.car.x
             )
         elif self.use_disturbances and not self.eval:
-            dist = np.array([np.random.uniform(self.car.dMin[i], self.car.dMax[i]) 
-                        for i in range(len(self.car.dMax))])
-            self.car.x = self.car.dynamics_non_hcl(0, self.car.x, action, dist) * self.dt + self.car.x
+            dist = np.array(
+                [
+                    np.random.uniform(self.car.dMin[i], self.car.dMax[i])
+                    for i in range(len(self.car.dMax))
+                ]
+            )
+            self.car.x = (
+                self.car.dynamics_non_hcl(0, self.car.x, action, disturbance=dist) * self.dt
+                + self.car.x
+            )
         else:
-            self.car.x = self.car.dynamics_non_hcl(0, self.car.x, action, np.zeros(3)) * self.dt + self.car.x
+            self.car.x = (
+                self.car.dynamics_non_hcl(0, self.car.x, action, np.zeros(3)) * self.dt
+                + self.car.x
+            )
         self.car.x[2] = self.normalize_angle(self.car.x[2])
         self.state = np.copy(self.car.x)
-        # print('final angle:', self.state[-1])
 
         reward = -np.linalg.norm(self.state[:2] - self.goal_location[:2])
 
@@ -187,10 +185,7 @@ class DubinsHallwayEnv(gym.Env):
             info["reach_goal"] = True
 
         # cost is based on distance to obstacle
-        if self.use_reach_avoid:
-            info["hj_value"] = self.grid.get_value(self.reach_avoid_brt, self.state)
-        else:
-            info["hj_value"] = self.grid.get_value(self.brt, self.state)
+        info["hj_value"] = self.grid.get_value(self.brt, self.state)
         # if info["hj_value"] < 0:
         # print(f"er: {self.state}")
 
@@ -209,17 +204,29 @@ class DubinsHallwayEnv(gym.Env):
             action = action[0]
 
         if self.use_disturbances and self.eval:
-            self.car.x = (
-                self.car.dynamics_non_hcl(0, self.car.x, action, disturbance=self.opt_dist())
+            state = (
+                self.car.dynamics_non_hcl(
+                    0, state, action, disturbance=self.opt_dist()
+                )
                 * self.dt
-                + self.car.x
+                + state
             )
         elif self.use_disturbances and not self.eval:
-            dist = np.array([np.random.uniform(self.car.dMin[i], self.car.dMax[i]) 
-                        for i in range(len(self.car.dMax))])
-            self.car.x = self.car.dynamics_non_hcl(0, self.car.x, action, dist) * self.dt + self.car.x
+            dist = np.array(
+                [
+                    np.random.uniform(self.car.dMin[i], self.car.dMax[i])
+                    for i in range(len(self.car.dMax))
+                ]
+            )
+            state = (
+                self.car.dynamics_non_hcl(0, state, action, dist) * self.dt
+                + state
+            )
         else:
-            self.car.x = self.car.dynamics_non_hcl(0, self.car.x, action, np.zeros(3)) * self.dt + self.car.x
+            state = (
+                self.car.dynamics_non_hcl(0, state, action, np.zeros(3)) * self.dt
+                + state
+            )
         state[2] = self.normalize_angle(state[2])
         # print(f"{self.state=}")
 
@@ -264,10 +271,7 @@ class DubinsHallwayEnv(gym.Env):
             info["reach_goal"] = True
 
         # cost is based on distance to obstacle
-        if self.use_reach_avoid:
-            info["hj_value"] = self.grid.get_value(self.reach_avoid_brt, state)
-        else:
-            info["hj_value"] = self.grid.get_value(self.brt, state)
+        info["hj_value"] = self.grid.get_value(self.brt, state)
 
         return np.copy(state), reward, done, info
 
@@ -394,7 +398,7 @@ class DubinsHallwayEnv(gym.Env):
 
     def opt_ctrl(self):
         index = self.grid.get_index(self.state)
-        brt = self.reach_avoid_brt if self.use_reach_avoid else self.max_over_min_brt
+        brt = self.max_over_min_brt
         spat_deriv = spa_deriv(index, brt, self.grid)
         opt_ctrl = self.car.opt_ctrl_non_hcl(0, self.state, spat_deriv)
         return opt_ctrl
@@ -405,27 +409,12 @@ class DubinsHallwayEnv(gym.Env):
         index = self.grid.get_index(state)
         # always use from max over min?
         # spat_deriv = spa_deriv(index, self.brt, self.grid, periodic_dims=[2])
-        spat_deriv = spa_deriv(
-            index, self.max_over_min_brt, self.grid
-        )
+        spat_deriv = spa_deriv(index, self.max_over_min_brt, self.grid)
         opt_dist = self.car.opt_dist_non_hcl(0, state, spat_deriv)
         return opt_dist
 
-    def safe_ctrl(self):
-        index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid)
-        return self.car.safe_ctrl_non_hcl(0, self.state, spat_deriv)
-
-    def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.0):
-        if self.use_reach_avoid:
-            return self.grid.get_value(self.reach_avoid_brt, self.state) > threshold_ra
-        else:
-            return self.grid.get_value(self.max_over_min_brt, self.state) < threshold
-
-    def unsafe_ctrl(self):
-        index = self.grid.get_index(self.state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid)
-        return self.car.unsafe_ctrl(0, self.state, spat_deriv)
+    def use_opt_ctrl(self, threshold=0.1):
+        return self.grid.get_value(self.max_over_min_brt, self.state) < threshold
 
     def action_safe(self, obs, action):
         # assume shape (n, )
@@ -433,42 +422,22 @@ class DubinsHallwayEnv(gym.Env):
         gradVdotFxu = self.reward_penalty(obs, action)
         return gradVdotFxu >= 0
 
-
-    @property
-    def min_reward(self):
-        return -np.linalg.norm(
-            self.goal_location[:2] - np.array([4.5, -4.5])
-        )  # -9.4069
-
-
 if __name__ in "__main__":
     import gym
 
-    def run_one_episode():
-        env = gym.make(
-            "Safe-DubinsHallway-v1", use_reach_avoid=True, use_disturbances=True
-        )
+    env = gym.make(
+        "Safe-DubinsHallway-v1", use_reach_avoid=True, use_disturbances=True
+    )
 
-        # env = gym.wrappers.RecordVideo(env, 'tmp/')
-        obs = env.reset()
-        done = False
-        while not done:
-            # env.render()
-            if env.use_opt_ctrl():
-                action = env.safe_ctrl()
-            else:
-                action = env.action_space.sample()
-            next_obs, reward, done, info = env.step(action)
-            if done:
-                print(info)
-                break
-        steps = env._elapsed_steps
-        env.close()
-        return steps
-
-    # from timeit import default_timer as timer
-
-    # start = timer()
-    steps = run_one_episode()
-    # end = timer()
-    # print((end - start) / steps)
+    obs = env.reset()
+    done = False
+    while not done:
+        if env.use_opt_ctrl():
+            action = env.safe_ctrl()
+        else:
+            action = env.action_space.sample()
+        next_obs, reward, done, info = env.step(action)
+        if done:
+            print(info)
+            break
+    env.close()

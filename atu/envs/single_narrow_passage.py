@@ -1,8 +1,8 @@
 import gym
 import os
 from gym.spaces import Box
-from atu.optimized_dp.Grid.GridProcessing import Grid
-import atu.optimized_dp.brt_single_narrow_passage as brt_config
+from atu.brt.brt_5D import grid
+import atu.brt.brt_5D as brt_config
 # from atu.optimized_dp.dynamics.SingleNarrowPassage import SingleNarrowPassage
 import numpy as np
 # import math

@@ -1,8 +1,8 @@
 import gym
 import os
 from gym.spaces import Box
-from atu.optimized_dp.brt_dunbin_hallway_4D import g as grid
-from atu.optimized_dp.brt_dunbin_hallway_4D import car_brt, car_ra
+from atu.brt.brt_4D import g as grid
+from atu.brt.brt_4D import car_brt
 from atu.utils import spa_deriv
 import numpy as np
 import matplotlib.pyplot as plt
