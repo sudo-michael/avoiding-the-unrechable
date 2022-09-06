@@ -193,8 +193,8 @@ class DubinsCar4D:
 
         x_dot[0] = state[2] * hcl.cos(state[3]) + dOpt[0]
         y_dot[0] = state[2] * hcl.sin(state[3]) + dOpt[1]
-        v_dot[0] = uOpt[0]
-        theta_dot[0] = state[2] * (hcl.sin(uOpt[1]) / hcl.cos(uOpt[1])) / L[0]
+        v_dot[0] = uOpt[0] + dOpt[2]
+        theta_dot[0] = state[2] * (hcl.sin(uOpt[1]) / hcl.cos(uOpt[1])) / L[0] + dOpt[3]
 
         return (x_dot[0], y_dot[0], v_dot[0], theta_dot[0])
 
@@ -202,7 +202,7 @@ class DubinsCar4D:
         # wheelbase of Tamiya TT02
         x_dot = state[2] * np.cos(state[3]) + dOpt[0]
         y_dot = state[2] * np.sin(state[3]) + dOpt[1]
-        v_dot = uOpt[0]
-        theta_dot = state[2] * np.tan(uOpt[1]) / self.length
+        v_dot = uOpt[0] + dOpt[2]
+        theta_dot = state[2] * np.tan(uOpt[1]) / self.length + dOpt[3]
 
         return np.array([x_dot, y_dot, v_dot, theta_dot])
