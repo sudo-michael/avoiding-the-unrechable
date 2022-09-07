@@ -7,6 +7,8 @@ from atu.utils import spa_deriv
 import numpy as np
 import matplotlib.pyplot as plt
 
+from scipy.integrate import odeint
+
 # import matplotlib matplotlib.use('tkagg')
 
 
@@ -34,8 +36,9 @@ class DubinsHallwayEnv(gym.Env):
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
         if self.use_disturbances and np.any(dist) > 0:
-            print('using disturbances')
-            print(f'{dist=}')
+            print("using disturbances")
+            print(f"{dist=}")
+            assert len(dist) == 4
             self.car = car_brt
             self.car.speed = speed
             self.car.dMax = dist
@@ -118,12 +121,13 @@ class DubinsHallwayEnv(gym.Env):
             action = action[0]
 
         if self.use_disturbances and self.eval:
-            self.car.x = (
-                self.car.dynamics_non_hcl(
-                    0, self.car.x, action, disturbance=self.opt_dist()
-                )
-                * self.dt
-                + self.car.x
+            dist = self.opt_dist()
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=self.car.x,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
             )
         elif self.use_disturbances and not self.eval:
             dist = np.array(
@@ -132,15 +136,23 @@ class DubinsHallwayEnv(gym.Env):
                     for i in range(len(self.car.dMax))
                 ]
             )
-            self.car.x = (
-                self.car.dynamics_non_hcl(0, self.car.x, action, disturbance=dist) * self.dt
-                + self.car.x
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=self.car.x,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
             )
         else:
-            self.car.x = (
-                self.car.dynamics_non_hcl(0, self.car.x, action, np.zeros(3)) * self.dt
-                + self.car.x
+            dist = np.zeros(3)
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=self.car.x,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
             )
+        self.car.x = sol[-1]
         self.car.x[2] = self.normalize_angle(self.car.x[2])
         self.state = np.copy(self.car.x)
 
@@ -204,12 +216,13 @@ class DubinsHallwayEnv(gym.Env):
             action = action[0]
 
         if self.use_disturbances and self.eval:
-            state = (
-                self.car.dynamics_non_hcl(
-                    0, state, action, disturbance=self.opt_dist()
-                )
-                * self.dt
-                + state
+            dist = self.opt_dist(state)
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=state,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
             )
         elif self.use_disturbances and not self.eval:
             dist = np.array(
@@ -218,15 +231,23 @@ class DubinsHallwayEnv(gym.Env):
                     for i in range(len(self.car.dMax))
                 ]
             )
-            state = (
-                self.car.dynamics_non_hcl(0, state, action, dist) * self.dt
-                + state
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=state,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
             )
         else:
-            state = (
-                self.car.dynamics_non_hcl(0, state, action, np.zeros(3)) * self.dt
-                + state
+            dist = np.zeros(3)
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=state,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
             )
+        state = sol[-1]
         state[2] = self.normalize_angle(state[2])
         # print(f"{self.state=}")
 
@@ -284,13 +305,9 @@ class DubinsHallwayEnv(gym.Env):
 
         index = self.grid.get_index(state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
+        dstb = self.opt_dist(state)
 
-        # NOTE: this should probabbly be in the Car class
-        gradVdotFxu = (
-            (self.car.speed * np.cos(state[2])) * spat_deriv[0]
-            + (self.car.speed * np.sin(state[2])) * spat_deriv[1]
-            + spat_deriv[2] * action[0]
-        )
+        gradVdotFxu = self.car.gradVdotFxu(state, action, dstb, spat_deriv)
 
         return gradVdotFxu
 
@@ -413,7 +430,7 @@ class DubinsHallwayEnv(gym.Env):
         opt_dist = self.car.opt_dist_non_hcl(0, state, spat_deriv)
         return opt_dist
 
-    def use_opt_ctrl(self, threshold=0.1):
+    def use_opt_ctrl(self, threshold=0.2):
         return self.grid.get_value(self.max_over_min_brt, self.state) < threshold
 
     def action_safe(self, obs, action):
@@ -422,12 +439,11 @@ class DubinsHallwayEnv(gym.Env):
         gradVdotFxu = self.reward_penalty(obs, action)
         return gradVdotFxu >= 0
 
+
 if __name__ in "__main__":
     import gym
 
-    env = gym.make(
-        "Safe-DubinsHallway-v1", use_reach_avoid=True, use_disturbances=True
-    )
+    env = gym.make("Safe-DubinsHallway-v1", use_reach_avoid=True, use_disturbances=True)
 
     obs = env.reset()
     done = False

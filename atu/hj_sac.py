@@ -432,7 +432,9 @@ if __name__ == "__main__":
                     and dones[0]
                     and not info.get("TimeLimit.truncated", False)
                 ):
-                    print(f"collision: f{obs=}")
+                    print(f"DEBUG collision: {obs=}")
+                    print(f"DEBUG {info['hj_value']=}")
+                    print(f"DEBUG {info['collision']=}")
                     writer.add_scalar(
                         "charts/hj_at_collision", info["hj_value"], global_step
                     )

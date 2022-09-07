@@ -71,6 +71,52 @@ class SingleNarrowPassage:
         d4 = hcl.scalar(0, "d4")
         d5 = hcl.scalar(0, "d5")
 
+        with hcl.if_(self.dMode == "max"):
+            with hcl.if_(spat_deriv[0] >= 0):
+                d1[0] = self.dMax[0]
+            with hcl.else_():
+                d1[0] = self.dMin[0]
+            with hcl.if_(spat_deriv[1] >= 0):
+                d2[0] = self.dMax[1]
+            with hcl.else_():
+                d2[0] = self.dMin[1]
+            with hcl.if_(spat_deriv[2] >= 0):
+                d3[0] = self.dMax[2]
+            with hcl.else_():
+                d3[0] = self.dMin[2]
+            with hcl.if_(spat_deriv[3] >= 0):
+                d4[0] = self.dMax[3]
+            with hcl.else_():
+                d4[0] = self.dMin[3]
+
+            with hcl.if_(spat_deriv[4] >= 0):
+                d5[0] = self.dMax[4]
+            with hcl.else_():
+                d5[0] = self.dMin[4]
+        with hcl.else_():
+            with hcl.if_(spat_deriv[0] >= 0):
+                d1[0] = self.dMin[0]
+            with hcl.else_():
+                d1[0] = self.dMax[0]
+            with hcl.if_(spat_deriv[1] >= 0):
+                d2[0] = self.dMin[1]
+            with hcl.else_():
+                d2[0] = self.dMax[1]
+            with hcl.if_(spat_deriv[2] >= 0):
+                d3[0] = self.dMin[2]
+            with hcl.else_():
+                d3[0] = self.dMax[2]
+
+            with hcl.if_(spat_deriv[3] >= 0):
+                d4[0] = self.dMin[3]
+            with hcl.else_():
+                d4[0] = self.dMax[3]
+
+            with hcl.if_(spat_deriv[4] >= 0):
+                d5[0] = self.dMin[4]
+            with hcl.else_():
+                d5[0] = self.dMax[4]
+
         return d1, d2, d3, d4, d5
 
     def dynamics(self, t, state, u_opt, d_opt):
@@ -87,11 +133,11 @@ class SingleNarrowPassage:
         x4_dot = hcl.scalar(0, "x4_dot")
         x5_dot = hcl.scalar(0, "x5_dot")
 
-        x1_dot[0] = state[3] * hcl.cos(state[2])
-        x2_dot[0] = state[3] * hcl.sin(state[2])
-        x3_dot[0] = state[3] * (hcl.sin(state[4]) / hcl.cos(state[4])) / self.length
-        x4_dot[0] = u_opt[0]
-        x5_dot[0] = u_opt[1]
+        x1_dot[0] = state[3] * hcl.cos(state[2]) + d_opt[0]
+        x2_dot[0] = state[3] * hcl.sin(state[2]) + d_opt[1]
+        x3_dot[0] = state[3] * (hcl.sin(state[4]) / hcl.cos(state[4])) / self.length + d_opt[2]
+        x4_dot[0] = u_opt[0] + d_opt[3]
+        x5_dot[0] = u_opt[1] + d_opt[4]
 
         return x1_dot[0], x2_dot[0], x3_dot[0], x4_dot[0], x5_dot[0]
 
@@ -131,7 +177,20 @@ class SingleNarrowPassage:
         return np.array([opt_u_alpha, opt_u_psi])
 
     def opt_dstb_non_hcl(self, t, state, spat_deriv):
-        return np.zeros(5)
+        d_opt = np.zeros(5)
+        if self.dMode == "max":
+            for i in range(5):
+                if spat_deriv[i] >= 0:
+                    d_opt[i] = self.dMax[i]
+                else:
+                    d_opt[i] = self.dMin[i]
+        elif self.dMode == "min":
+            for i in range(5):
+                if spat_deriv[i] >= 0:
+                    d_opt[i] = self.dMin[i]
+                else:
+                    d_opt[i] = self.dMax[i]
+        return d_opt
 
     def dynamics_non_hcl(self, t, state, u_opt, d_opt=np.zeros(5)):
         """
@@ -145,20 +204,16 @@ class SingleNarrowPassage:
         \dot{x_4} = a  # theta  # v 
         \dot{x_5} = psi # phi (steering angle)
         """
-        x0_dot = state[3] * np.cos(state[2])
-        x1_dot = state[3] * np.sin(state[2])
-        x2_dot = state[3] * np.tan(state[4]) / self.length
-        x3_dot = u_opt[0]
-        x4_dot = u_opt[1]
+        x0_dot = state[3] * np.cos(state[2]) + d_opt[0]
+        x1_dot = state[3] * np.sin(state[2]) + d_opt[1]
+        x2_dot = state[3] * np.tan(state[4]) / self.length + d_opt[2]
+        x3_dot = u_opt[0] + d_opt[3]
+        x4_dot = u_opt[1] + d_opt[4]
 
         return np.array([x0_dot, x1_dot, x2_dot, x3_dot, x4_dot])
 
 
-# # TODO
-# - [ ] implement baseline 1
-# - [ ] implement baseline 2
-# - [ ] run experiments on 3 environments
-# - contributions
-#   - introduce simple reward-shpaing framework to incorporate feedback from an HJ controller to RL
-#   - imperically show that our method allows policy to act safe after HJ controller is removed
-#   - and show that method is robust to worse-case disturbances
+    def gradVdotFxu(self, state, u_opt, disturbance, spat_deriv):
+        dyn = self.dynamics_non_hcl(0, state, u_opt, disturbance)
+        return  dyn @ spat_deriv
+

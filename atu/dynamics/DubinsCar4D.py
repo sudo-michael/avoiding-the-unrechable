@@ -22,13 +22,13 @@ class DubinsCar4D:
     def __init__(
         self,
         x=[0, 0, 0, 0],
-        uMin=[-1.5, -math.pi / 8],
+        uMin=[-1.5, -math.pi / 8],  # 0.39
         uMax=[1.5, math.pi / 8],
         dMin=[0.0, 0.0],
         dMax=[0.0, 0.0],
         uMode="max",
         dMode="min",
-        length=1.0,
+        length=0.2,
     ):
 
         """Creates a Dublin Car with the following states:
@@ -87,12 +87,12 @@ class DubinsCar4D:
         in3 = hcl.scalar(0, "in3")
         in4 = hcl.scalar(0, "in4")
 
-        if self.uMode == "min":
+        with hcl.if_(self.uMode == "min"):
             with hcl.if_(spat_deriv[2] > 0):
                 opt_a[0] = self.uMin[0]
             with hcl.if_(spat_deriv[3] > 0):
                 opt_w[0] = self.uMin[1]
-        else:
+        with hcl.else_():  # uMode == max
             with hcl.if_(spat_deriv[2] < 0):
                 opt_a[0] = self.uMin[0]
             with hcl.if_(spat_deriv[3] < 0):
@@ -145,42 +145,51 @@ class DubinsCar4D:
                 d2[0] = self.dMax[1]
             with hcl.elif_(spat_deriv[1] < 0):
                 d2[0] = self.dMin[1]
+            with hcl.if_(spat_deriv[2] >= 0):
+                d3[0] = self.dMax[2]
+            with hcl.else_():
+                d3[0] = self.dMin[2]
+            with hcl.if_(spat_deriv[3] >= 0):
+                d4[0] = self.dMax[3]
+            with hcl.else_():
+                d4[0] = self.dMin[3]
         with hcl.else_():
             with hcl.if_(spat_deriv[0] > 0):
                 d1[0] = self.dMin[0]
             with hcl.elif_(spat_deriv[0] < 0):
                 d1[0] = self.dMax[0]
+
             with hcl.if_(spat_deriv[1] > 0):
                 d2[0] = self.dMin[1]
             with hcl.elif_(spat_deriv[1] < 0):
                 d2[0] = self.dMax[1]
+
+            with hcl.if_(spat_deriv[2] > 0):
+                d3[0] = self.dMin[2]
+            with hcl.elif_(spat_deriv[2] < 0):
+                d3[0] = self.dMax[2]
+
+            with hcl.if_(spat_deriv[3] > 0):
+                d4[0] = self.dMin[3]
+            with hcl.elif_(spat_deriv[3] < 0):
+                d4[0] = self.dMax[3]
         return (d1[0], d2[0], d3[0], d4[0])
 
     def opt_dstb_non_hcl(self, t, state, spat_deriv):
-        d1 = 0
-        d2 = 0
-        d3 = 0
-        d4 = 0
+        d_opt = np.zeros(4)
         if self.dMode == "max":
-            if spat_deriv[0] > 0:
-                d1 = self.dMax[0]
-            elif spat_deriv[0] < 0:
-                d1 = self.dMin[0]
-
-            if spat_deriv[1] > 0:
-                d2 = self.dMax[1]
-            elif spat_deriv[1] < 0:
-                d2 = self.dMin[1]
-        else:
-            if spat_deriv[0] > 0:
-                d1 = self.dMin[0]
-            elif spat_deriv[0] < 0:
-                d1 = self.dMax[0]
-            if spat_deriv[1] > 0:
-                d2 = self.dMin[1]
-            elif spat_deriv[1] < 0:
-                d2 = self.dMax[1]
-        return d1, d2, d3, d4
+            for i in range(4):
+                if spat_deriv[i] >= 0:
+                    d_opt[i] = self.dMax[i]
+                else:
+                    d_opt[i] = self.dMin[i]
+        elif self.dMode == "min":
+            for i in range(4):
+                if spat_deriv[i] >= 0:
+                    d_opt[i] = self.dMin[i]
+                else:
+                    d_opt[i] = self.dMax[i]
+        return d_opt
 
     def dynamics(self, t, state, uOpt, dOpt):
         # wheelbase of Tamiya TT02
@@ -198,11 +207,22 @@ class DubinsCar4D:
 
         return (x_dot[0], y_dot[0], v_dot[0], theta_dot[0])
 
-    def dynamics_non_hcl(self, t, state, uOpt, dOpt):
+    def dynamics_non_hcl(self, t, state, uOpt, dOpt=np.zeros(4)):
         # wheelbase of Tamiya TT02
         x_dot = state[2] * np.cos(state[3]) + dOpt[0]
         y_dot = state[2] * np.sin(state[3]) + dOpt[1]
         v_dot = uOpt[0] + dOpt[2]
         theta_dot = state[2] * np.tan(uOpt[1]) / self.length + dOpt[3]
 
-        return np.array([x_dot, y_dot, v_dot, theta_dot])
+        return np.array([x_dot, y_dot, v_dot, theta_dot], dtype=np.float32)
+
+    def gradVdotFxu(self, state, uOpt, dOpt, spat_deriv):
+
+        x_dot = state[2] * np.cos(state[3]) + dOpt[0]
+        y_dot = state[2] * np.sin(state[3]) + dOpt[1]
+        v_dot = uOpt[0] + dOpt[2]
+        theta_dot = state[2] * np.tan(uOpt[1]) / self.length + dOpt[3]
+
+        dyn = np.array([x_dot, y_dot, v_dot, theta_dot])
+        return  dyn @ spat_deriv
+

@@ -17,7 +17,6 @@ car_ra = DubinsCar(uMode="min", dMode="max", wMax=1.5, r=car_r)
 
 if __name__ in "__main__":
     from odp.Shapes.ShapesFunctions import *
-    from odp.dynamics.DubinsCar import *
     from odp.Plots.plot_options import *
     from odp.solver import HJSolver
 
@@ -74,7 +73,7 @@ if __name__ in "__main__":
         else:
             np.save("./atu/envs/assets/brts/min_hallway_brt.npy", result)
 
-        lookback_length = 0.8
+        lookback_length = 0.2
         t_step = 0.05
 
         small_number = 1e-5

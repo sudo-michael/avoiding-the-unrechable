@@ -7,7 +7,7 @@ import time
 class DubinsCar:
     def __init__(
         self,
-        x=[0, 0, 0],
+        x=np.array([0, 0, 0]),
         wMax=1.5,
         speed=1,
         dMin=[0, 0, 0],
@@ -103,33 +103,6 @@ class DubinsCar:
 
         return np.array([opt_w])
 
-    def safe_ctrl(self, t, state, spat_deriv, uniform_sample=True):
-        opt_w = self.w_max
-        if spat_deriv[2] > 0:
-            if self.u_mode == "min":
-                opt_w = -opt_w
-        elif spat_deriv[2] < 0:
-            if self.u_mode == "max":
-                opt_w = -opt_w
-        b = (self.speed * np.cos(state[2])) * spat_deriv[0] + (
-            self.speed * np.sin(state[2])
-        ) * spat_deriv[1]
-        # print('gradVdotF: ', b + opt_w * spat_deriv[2])
-        m = spat_deriv[2]
-        x_intercept = -b / (m + 1e-5)
-        if np.sign(m) == 1:
-            w_upper = opt_w
-            w_lower = max(x_intercept, -self.w_max)
-        elif np.sign(m) == -1:
-            w_upper = min(x_intercept, self.w_max)
-            w_lower = -self.w_max
-        else:
-            w_lower = opt_w
-            w_upper = opt_w
-        if uniform_sample:
-            return np.random.uniform(w_lower, w_upper, size=(1,))
-        return np.array([w_lower, w_upper])
-
     def opt_dist_non_hcl(self, t, state, spat_deriv):
         d_opt = np.zeros(3)
         if self.dMode == "max":
@@ -149,5 +122,14 @@ class DubinsCar:
     def dynamics_non_hcl(self, t, state, u_opt, disturbance=np.zeros(3)):
         x_dot = self.speed * np.cos(state[2]) + disturbance[0]
         y_dot = self.speed * np.sin(state[2]) + disturbance[1]
-        theta_dot = u_opt[0] + disturbance[2] / 3
+        theta_dot = u_opt[0] + disturbance[2]
         return np.array([x_dot, y_dot, theta_dot], dtype=np.float32)
+
+    def gradVdotFxu(self, state, u_opt, disturbance, spat_deriv):
+        x_dot = self.speed * np.cos(state[2]) + disturbance[0]
+        y_dot = self.speed * np.sin(state[2]) + disturbance[1]
+        theta_dot = u_opt[0] + disturbance[2]
+
+        dyn = np.array([x_dot, y_dot, theta_dot])
+        return  dyn @ spat_deriv
+
