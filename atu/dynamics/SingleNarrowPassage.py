@@ -71,7 +71,7 @@ class SingleNarrowPassage:
         d4 = hcl.scalar(0, "d4")
         d5 = hcl.scalar(0, "d5")
 
-        with hcl.if_(self.dMode == "max"):
+        with hcl.if_(self.d_mode == "max"):
             with hcl.if_(spat_deriv[0] >= 0):
                 d1[0] = self.dMax[0]
             with hcl.else_():
@@ -178,13 +178,13 @@ class SingleNarrowPassage:
 
     def opt_dstb_non_hcl(self, t, state, spat_deriv):
         d_opt = np.zeros(5)
-        if self.dMode == "max":
+        if self.d_mode == "max":
             for i in range(5):
                 if spat_deriv[i] >= 0:
                     d_opt[i] = self.dMax[i]
                 else:
                     d_opt[i] = self.dMin[i]
-        elif self.dMode == "min":
+        elif self.d_mode == "min":
             for i in range(5):
                 if spat_deriv[i] >= 0:
                     d_opt[i] = self.dMin[i]

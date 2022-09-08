@@ -36,7 +36,7 @@ if __name__ in "__main__":
         Initial_value_f,
         Union(
             Lower_Half_Space(g, 0, -4.5 + car_r), Upper_Half_Space(g, 0, 4.5 - car_r)
-        ),
+        )
     )
 
     # y walls
