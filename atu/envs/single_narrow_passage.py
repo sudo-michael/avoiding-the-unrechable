@@ -23,7 +23,7 @@ class SingleNarrowPassageEnv(gym.Env):
     def __init__(
         self,
         done_if_unsafe=True,
-        use_disturbances=False,
+        use_disturbances=True,
         dist=np.array([0.1, 0.1, 0.1, 0.1, 0.1]),
         eval=False,
     ) -> None:
@@ -149,7 +149,7 @@ class SingleNarrowPassageEnv(gym.Env):
             )
         self.car.x = sol[-1]
         self.car.x[2] = self.normalize_angle(self.car.x[2])
-        self.car.x = np.clip(self.car.x, self.g.min, self.g.max)
+        self.car.x = np.clip(self.car.x, self.grid.min, self.grid.max)
         self.state = np.copy(self.car.x)
 
         reward = -np.linalg.norm(self.state[:2] - self.goal_location)
@@ -228,7 +228,7 @@ class SingleNarrowPassageEnv(gym.Env):
             )
         state = sol[-1]
         state[2] = self.normalize_angle(state)
-        state = np.clip(state, self.g.min, self.g.max)
+        state = np.clip(state, self.grid.min, self.grid.max)
 
         reward = -np.linalg.norm(state[:2] - self.goal_location)
 
@@ -360,9 +360,9 @@ class SingleNarrowPassageEnv(gym.Env):
         ):
             return True
         elif not (
-            self.g.min[0] + 0.5 * self.car.length
+            self.grid.min[0] + 0.5 * self.car.length
             <= state[0]
-            <= self.g.max[0] - 0.5 * self.car.length
+            <= self.grid.max[0] - 0.5 * self.car.length
         ):
             return True
         return False
@@ -427,7 +427,7 @@ if __name__ in "__main__":
     from gym.wrappers import TransformObservation
     import gym
 
-    env = SingleNarrowPassageEnv(use_disturbances=False, reach_avoid=False)
+    env = SingleNarrowPassageEnv()
     obs = env.reset()
     done = False
     while not done:
