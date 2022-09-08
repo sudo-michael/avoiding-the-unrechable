@@ -294,7 +294,7 @@ class DubinsHallway4DEnv(gym.Env):
             info["safe"] = False
             info["cost"] = 1
             info["collision"] = "wall"
-        elif self.near_goal():
+        elif self.near_goal(state):
             done = True
             reward = 100.0
             info["reach_goal"] = True
@@ -415,9 +415,12 @@ class DubinsHallway4DEnv(gym.Env):
 
         return dx**2 + dy**2 <= radius**2
 
-    def near_goal(self):
+    def near_goal(self, state=None):
+        if not isinstance(state, np.ndarray):
+            state = self.state
+
         return (
-            np.linalg.norm(self.goal_location[:2] - self.car.x[:2])
+            np.linalg.norm(self.goal_location[:2] - state[:2])
             <= self.goal_location[2] + self.car.r
         )
 

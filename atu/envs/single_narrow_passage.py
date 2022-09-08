@@ -1,130 +1,109 @@
 import gym
 import os
 from gym.spaces import Box
-from atu.brt.brt_5D import grid
-import atu.brt.brt_5D as brt_config
-
-# from atu.optimized_dp.dynamics.SingleNarrowPassage import SingleNarrowPassage
-import numpy as np
-
-# import math
-import matplotlib.pyplot as plt
+from atu.brt.brt_5D import g as grid
+from atu.brt.brt_5D import car_brt
 from atu.utils import spa_deriv
+import numpy as np
+import matplotlib.pyplot as plt
+
+import atu.brt.brt_5D as brt_config
+from atu.brt.brt_5D import L, CURB_POSITION, STRANDED_CAR_POS, STRANDED_R2_POS, GOAL_POS
+from scipy.integrate import odeint
 
 
 class SingleNarrowPassageEnv(gym.Env):
 
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
+    metadata = {
+        "render_modes": ["human", "rgb_array"],
+        "render.modes": ["human", "rgb_array"],
+        "render_fps": 30,
+    }
 
     def __init__(
-        self, done_if_unsafe=True, use_disturbances=False
+        self,
+        done_if_unsafe=True,
+        use_disturbances=False,
+        dist=np.array([0.1, 0.1, 0.1, 0.1, 0.1]),
+        eval=False,
     ) -> None:
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
+        self.eval = eval
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-            self.car = brt_config.car_brt
+
+        if self.use_disturbances and np.any(dist) > 0:
+            print("using disturbances")
+            print(f"{dist=}")
+            assert len(dist) == 5
+            self.car = car_brt
+            self.car.dMax = dist
+            self.car.dMin = -dist
+            self.max_over_min_brt = np.load(
+                os.path.join(
+                    dir_path,
+                    "assets/brts/max_over_min_single_narrow_passage_brt_dist.npy",
+                )
+            )
             self.brt = np.load(
                 os.path.join(
-                    dir_path, "assets/brts/single_narrow_passage_brt_goal_low.npy"
+                    dir_path, "assets/brts/min_single_narrow_passage_brt_dist.npy"
                 )
             )
 
+        else:
+            print("not using disturbances")
+            self.car = car_brt
+            self.car.dMax = np.zeros(5)
+            self.car.dMin = np.zeros(5)
+            self.max_over_min_brt = np.load(
+                os.path.join(
+                    dir_path, "assets/brts/max_over_min_single_narrow_passage_brt.npy"
+                )
+            )
+            self.brt = np.load(
+                os.path.join(
+                    dir_path, "assets/brts/min_single_narrow_passage_brt_dist.npy"
+                )
+            )
+        print(f"{self.car.alpha_max=} {self.car.psi_max}")
         self.state = None
         self.dt = 0.05
-
         self.action_space = Box(
-            # low=np.array([self.car.alpha_min, self.car.psi_min]),
-            low=np.array(
-                [self.car.alpha_min / 2, self.car.psi_min]
-            ),  # prevent car from slowing down too much
+            low=np.array([self.car.alpha_min, self.car.psi_min]),
             high=np.array([self.car.alpha_max, self.car.psi_max]),
             dtype=np.float32,
             shape=(2,),
         )
 
         self.observation_space = Box(
-            low=brt_config.grid_low,
-            high=brt_config.grid_high,
+            low=grid.min,
+            high=grid.max,
             shape=(5,),
             dtype=np.float32,
         )
 
-        self.goal_location = brt_config.GOAL_POS
+        self.goal_location = GOAL_POS
 
-        self.grid = brt_config.grid
+        self.grid = grid
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
-        self.hist = []
-
-    def simulate_step(self, state, action):
-        if isinstance(action, dict):
-            used_hj = action["used_hj"]
-            action = action["actions"]
-        else:
-            used_hj = False
-
-        if action.shape != (2,):
-            action = action[0]
-
-        if self.use_disturbances:
-            state = (
-                self.car.dynamics_non_hcl(0, state, action, disturbance=self.opt_dist())
-                * self.dt
-                + state
-            )
-        else:
-            # print(f"before: {self.car.x}")
-            # print(f"dyn:    {self.car.dynamics_non_hcl(0, self.car.x, action)}")
-            # print(f"action:   {action}")
-            state = self.car.dynamics_non_hcl(0, state, action) * self.dt + state
-        state = self.normalize_angle(self.car.x[2])
-        state = np.clip(state, brt_config.grid_low, brt_config.grid_high)
-        # print(f"after:  {self.car.x}")
-        # print(f"value: {self.grid.get_value(self.brt, self.car.x)}")
-
-        reward = -np.linalg.norm(state[:2] - self.goal_location)
-
-        done = False
-        info = {}
-        info["used_hj"] = used_hj
-        if self.collision_curb_or_bounds(state):
-            # print(f"colide curb or bounds, {self.state=}")
-            if self.done_if_unsafe:
-                done = True
-            elif self.penalize_unsafe:
-                reward = self.min_reward * 2
-            info["cost"] = 1
-            info["safe"] = False
-        elif self.collision_car(state):
-            # print(f"collision car: {self.state=}")
-            if self.done_if_unsafe:
-                done = True
-            elif self.penalize_unsafe:
-                reward = self.min_reward * 2
-            info["cost"] = 1
-            info["safe"] = False
-        elif self.near_goal(state):
-            # print("reach goal")
-            done = True
-            reward = 100.0
-            info["reach_goal"] = True
-
-        # cost is based on distance to obstacle
-        # info["hj_value"] = self.grid.get_value(self.brt, self.car.x)
-
-        # self.hist.append(np.copy(self.state))
-
-        return np.copy(state), reward, done, info
+        # self.hist = []
 
     def reset(self, seed=None):
-        # self.hist.clear()
-        # self.car.x = np.array(self.car.x, dtype=np.float32)
-        self.car.x = np.array([-6, -1.4, 0, 1, 0])
+        # while True:
+        #     self.car.x = np.random.uniform(
+        #         low=,
+        #         high=
+        #     )
+
+        #     if self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.5:
+        #         break
+        self.car.x = np.array([-6, -1.4, 0, 1, 0], dtype=np.float32)
         self.state = np.copy(self.car.x)
-        # # self.hist.append(np.copy(self.state))
-        return np.array(self.car.x)
+        return np.copy(self.car.x)
 
     def step(self, action: np.array):
         if isinstance(action, dict):
@@ -170,7 +149,7 @@ class SingleNarrowPassageEnv(gym.Env):
             )
         self.car.x = sol[-1]
         self.car.x[2] = self.normalize_angle(self.car.x[2])
-        self.car.x = np.clip(self.car.x, brt_config.grid_low, brt_config.grid_high) # why?
+        self.car.x = np.clip(self.car.x, self.g.min, self.g.max)
         self.state = np.copy(self.car.x)
 
         reward = -np.linalg.norm(self.state[:2] - self.goal_location)
@@ -182,20 +161,92 @@ class SingleNarrowPassageEnv(gym.Env):
             print(f"colide curb or bounds, {self.state=}")
             if self.done_if_unsafe:
                 done = True
-            elif self.penalize_unsafe:
-                reward = self.min_reward * 2
             info["cost"] = 1
             info["safe"] = False
-            info['collision'] = 'curb or oob'
+            info["collision"] = "curb or oob"
         elif self.collision_car():
             print(f"collision car: {self.state=}")
             if self.done_if_unsafe:
                 done = True
-            elif self.penalize_unsafe:
-                reward = self.min_reward * 2
             info["cost"] = 1
             info["safe"] = False
-            info['collision'] = 'car'
+            info["collision"] = "car"
+        elif self.near_goal():
+            print("reach goal")
+            done = True
+            reward = 100.0
+            info["reach_goal"] = True
+
+        # cost is based on distance to obstacle
+        info["hj_value"] = self.grid.get_value(self.brt, self.state)
+
+        # self.hist.append(np.copy(self.state))
+
+        return np.copy(self.state), reward, done, info
+
+    def simulate_step(self, state, action):
+        if isinstance(action, dict):
+            used_hj = action["used_hj"]
+            action = action["actions"]
+        else:
+            used_hj = False
+
+        if action.shape != (2,):
+            action = action[0]
+
+        if self.use_disturbances and self.eval:
+            dist = self.opt_dist()
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=state,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
+            )
+        elif self.use_disturbances and not self.eval:
+            dist = np.array(
+                [
+                    np.random.uniform(self.car.dMin[i], self.car.dMax[i])
+                    for i in range(len(self.car.dMax))
+                ]
+            )
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=state,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
+            )
+        else:
+            dist = np.zeros(5)
+            sol = odeint(
+                self.car.dynamics_non_hcl,
+                y0=state,
+                t=np.linspace(0, self.dt, 4),
+                args=(action, dist),
+                tfirst=True,
+            )
+        state = sol[-1]
+        state[2] = self.normalize_angle(state)
+        state = np.clip(state, self.g.min, self.g.max)
+
+        reward = -np.linalg.norm(state[:2] - self.goal_location)
+
+        done = False
+        info = {}
+        info["used_hj"] = used_hj
+        if self.collision_curb_or_bounds(state):
+            if self.done_if_unsafe:
+                done = True
+            info["cost"] = 1
+            info["safe"] = False
+            info["collision"] = "curb or oob"
+        elif self.collision_car(state):
+            if self.done_if_unsafe:
+                done = True
+            info["cost"] = 1
+            info["safe"] = False
+            info["collision"] = "car"
         elif self.near_goal():
             print("reach goal")
             done = True
@@ -303,15 +354,15 @@ class SingleNarrowPassageEnv(gym.Env):
         if not isinstance(state, np.ndarray):
             state = self.state
         if not (
-            brt_config.CURB_POSITION[0] + 0.5 * self.car.length
+            CURB_POSITION[0] + 0.5 * self.car.length
             <= state[1]
-            <= brt_config.CURB_POSITION[1] - 0.5 * self.car.length
+            <= CURB_POSITION[1] - 0.5 * self.car.length
         ):
             return True
         elif not (
-            brt_config.grid_low[0] + 0.5 * self.car.length
+            self.g.min[0] + 0.5 * self.car.length
             <= state[0]
-            <= brt_config.grid_high[0] - 0.5 * self.car.length
+            <= self.g.max[0] - 0.5 * self.car.length
         ):
             return True
         return False
@@ -327,8 +378,11 @@ class SingleNarrowPassageEnv(gym.Env):
             <= self.car.length
         )
 
-    def near_goal(self):
-        return np.linalg.norm(self.goal_location[:2] - self.state[:2]) <= (
+    def near_goal(self, state=None):
+        if not isinstance(state, np.ndarray):
+            state = self.state
+
+        return np.linalg.norm(self.goal_location[:2] - state[:2]) <= (
             self.car.length + self.car.length
         )
 
@@ -340,13 +394,13 @@ class SingleNarrowPassageEnv(gym.Env):
 
     def opt_dist(self, state=None):
         if state is None:
-            state =self.state
+            state = self.state
         index = self.grid.get_index(state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
-        opt_dist = self.car.opt_dist(0, state, spat_deriv)
+        opt_dist = self.car.opt_dist_non_hcl(0, state, spat_deriv)
         return opt_dist
 
-    def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.2):
+    def use_opt_ctrl(self, threshold=0.2):
         return self.grid.get_value(self.brt, self.state) < threshold
 
     def reward_penalty(self, state: np.array, action: np.array):
@@ -358,15 +412,9 @@ class SingleNarrowPassageEnv(gym.Env):
 
         index = self.grid.get_index(state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
+        dstb = self.opt_dist(state)
 
-        # NOTE: this should probabbly be in the Car class
-        gradVdotFxu = (
-            (state[3] * np.cos(state[2])) * spat_deriv[0]
-            + (state[3] * np.sin(state[2])) * spat_deriv[1]
-            + (state[3] * np.tan(state[4]) / self.car.length) * spat_deriv[2]
-            + action[0] * spat_deriv[3]
-            + action[1] * spat_deriv[4]
-        )
+        gradVdotFxu = self.car.gradVdotFxu(state, action, dstb, spat_deriv)
 
         return gradVdotFxu
 
