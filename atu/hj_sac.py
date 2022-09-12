@@ -132,6 +132,8 @@ def make_env(args, seed, capture_video, idx, run_name, eval=False):
             if idx == 0:
                 if eval:
                     env = gym.wrappers.RecordVideo(env, f"videos_eval/{run_name}")
+                else:
+                    env = gym.wrappers.RecordVideo(env, f"eval/{run_name}")
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)

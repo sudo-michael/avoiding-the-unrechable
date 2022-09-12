@@ -16,7 +16,7 @@ g = Grid(
     [2, 4],
 )
 
-L = 1.25
+L = 1.00
 CURB_POSITION = np.array([-2.8, 2.8])
 WALL_POSITION = np.array([-8.0, 8.0])
 STRANDED_CAR_POS = np.array([0.0, -1.8])
@@ -51,9 +51,9 @@ if __name__ in "__main__":
 
     obstacle = Union(stranded_car, Union(walls, curb))
 
-    ivf = Union(obstacle, Union(Lower_Half_Space(g, 3, -0.05), Upper_Half_Space(g, 3, 5))) # v
+    ivf = Union(obstacle, Union(Lower_Half_Space(g, 3, 0.9), Upper_Half_Space(g, 3, 5))) # v
     ivf = Union(
-        obstacle,
+        ivf,
         Union(
             Lower_Half_Space(g, 4, -1.25), # psi
             Upper_Half_Space(g, 4, 1.25),  # psi
@@ -86,13 +86,12 @@ if __name__ in "__main__":
         print(result.sum())
 
         if d:
-            np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt_dist_2.npy", result)
+            np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt_dist_4.npy", result)
         else:
             np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt.npy", result)
 
         lookback_length = 0.05
         t_step = 0.05
-
         small_number = 1e-5
         tau2 = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
 
@@ -114,7 +113,7 @@ if __name__ in "__main__":
 
         if d:
             np.save(
-                "./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt_dist_2.npy", result
+                "./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt_dist_4.npy", result
             )
         else:
             np.save("./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt.npy", result)
