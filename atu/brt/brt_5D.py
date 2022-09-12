@@ -51,7 +51,7 @@ if __name__ in "__main__":
 
     obstacle = Union(stranded_car, Union(walls, curb))
 
-    ivf = Union(obstacle, Union(Lower_Half_Space(g, 3, -0.05), Upper_Half_Space(g, 3, 6))) # v
+    ivf = Union(obstacle, Union(Lower_Half_Space(g, 3, -0.05), Upper_Half_Space(g, 3, 5))) # v
     ivf = Union(
         obstacle,
         Union(
@@ -86,7 +86,7 @@ if __name__ in "__main__":
         print(result.sum())
 
         if d:
-            np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt_dist.npy", result)
+            np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt_dist_2.npy", result)
         else:
             np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt.npy", result)
 
@@ -114,7 +114,7 @@ if __name__ in "__main__":
 
         if d:
             np.save(
-                "./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt_dist.npy", result
+                "./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt_dist_2.npy", result
             )
         else:
             np.save("./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt.npy", result)
