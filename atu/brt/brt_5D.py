@@ -9,17 +9,17 @@ from odp.dynamics.DubinsCar5DAvoid import DubinsCar5DAvoid
 # 0 1 2  3 4
 # x y th v phi
 g = Grid(
-    np.array([-8.0, -3.0, -np.pi, -0.1, -1.3]),
-    np.array([8.0, 3.0, np.pi, 6.5, 1.3]),
+    np.array([-8.0, -3.0, -np.pi, -0.2, -1.4]),
+    np.array([8.0, 3.0, np.pi, 7.0, 1.4]),
     5,
-    np.array([20, 20, 20, 20, 20]),
+    np.array([40, 40, 20, 40, 20]),
     [2, 4],
 )
 
 L = 1.25
 CURB_POSITION = np.array([-2.8, 2.8])
+WALL_POSITION = np.array([-8.0, 8.0])
 STRANDED_CAR_POS = np.array([0.0, -1.8])
-STRANDED_R2_POS = np.array([-6.0, 1.8])
 GOAL_POS = np.array([6.0, -1.4])
 
 dist = np.array([0.1, 0.1, 0.1, 0.1, 0.1])
@@ -39,17 +39,19 @@ if __name__ in "__main__":
         Upper_Half_Space(g, 1, CURB_POSITION[1] - 0.5 * L),
     )
 
+    walls = Union(
+        Lower_Half_Space(g, 0, WALL_POSITION[0] + 0.5 * L),
+        Upper_Half_Space(g, 0, WALL_POSITION[1] - 0.5 * L),
+    )
+
+
     stranded_car = CylinderShape(
         g, np.array([2, 3, 4]), center=STRANDED_CAR_POS, radius=L
     )
 
-    stranded_r2_pos = CylinderShape(
-        g, np.array([2, 3, 4]), center=STRANDED_R2_POS, radius=L
-    )
+    obstacle = Union(stranded_car, Union(walls, curb))
 
-    obstacle = Union(curb, Union(stranded_r2_pos, stranded_car))
-
-    ivf = Union(obstacle, Lower_Half_Space(g, 3, -0.1)) # v
+    ivf = Union(obstacle, Union(Lower_Half_Space(g, 3, -0.05), Upper_Half_Space(g, 3, 6.5))) # v
     ivf = Union(
         obstacle,
         Union(
@@ -59,7 +61,7 @@ if __name__ in "__main__":
     )
 
     def brt(d=True):
-        lookback_length = 2.0
+        lookback_length = 6.0
         t_step = 0.05
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
@@ -84,7 +86,7 @@ if __name__ in "__main__":
         print(result.sum())
 
         if d:
-            np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt_dist.npy", result)
+            np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt_dist_12.npy", result)
         else:
             np.save("./atu/envs/assets/brts/min_single_narrow_passage_brt.npy", result)
 
@@ -112,7 +114,7 @@ if __name__ in "__main__":
 
         if d:
             np.save(
-                "./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt_dist.npy", result
+                "./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt_dist_12.npy", result
             )
         else:
             np.save("./atu/envs/assets/brts/max_over_min_single_narrow_passage_brt.npy", result)

@@ -67,7 +67,7 @@ class DubinsHallway4DEnv(gym.Env):
         print(f"{self.car.uMax=}")
         print(f"{self.car.uMin=}")
         self.state = None
-        self.dt = 0.05
+        self.dt = 0.03
         self.action_space = Box(
             low=self.car.uMin, high=self.car.uMax, dtype=np.float32, shape=(2,)
         )
@@ -474,17 +474,26 @@ if __name__ in "__main__":
     # end = timer()
     # print((end - start) / steps)
 
-    env = DubinsHallway4DEnv(use_reach_avoid=False, use_disturbances=True)
+    env = DubinsHallway4DEnv(use_disturbances=True)
     obs = env.reset()
+
+    obs = np.array([-3.2, -3.2, 0.8, -np.pi * 3/4])
+    env.state = np.copy(obs)
+    env.car.x = np.copy(obs)
+
+    hj = []
+
     # print(obs)
     done = False
     while not done:
         # print(obs)
-        # if env.use_opt_ctrl():
-        action = env.safe_ctrl()
-        # else:
-        # action = env.action_space.sample()
+        if env.use_opt_ctrl():
+            action = env.opt_ctrl()
+        else:
+            action = env.action_space.sample()
         next_obs, reward, done, info = env.step(action)
-        print(info["hj_value"])
+        hj.append(info['hj_value'])
+        print(info["hj_value"], action)
         obs = next_obs
         env.render()
+    env.close()

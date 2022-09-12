@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import atu.brt.brt_5D as brt_config
-from atu.brt.brt_5D import L, CURB_POSITION, STRANDED_CAR_POS, STRANDED_R2_POS, GOAL_POS
+from atu.brt.brt_5D import L, CURB_POSITION, STRANDED_CAR_POS, GOAL_POS
 from scipy.integrate import odeint
 
 
@@ -24,6 +24,7 @@ class SingleNarrowPassageEnv(gym.Env):
         self,
         done_if_unsafe=True,
         use_disturbances=True,
+        speed=0.0, # ignore, used in other envs
         dist=np.array([0.1, 0.1, 0.1, 0.1, 0.1]),
         eval=False,
     ) -> None:
@@ -44,12 +45,12 @@ class SingleNarrowPassageEnv(gym.Env):
             self.max_over_min_brt = np.load(
                 os.path.join(
                     dir_path,
-                    "assets/brts/max_over_min_single_narrow_passage_brt_dist.npy",
+                    "assets/brts/max_over_min_single_narrow_passage_brt_dist_12.npy",
                 )
             )
             self.brt = np.load(
                 os.path.join(
-                    dir_path, "assets/brts/min_single_narrow_passage_brt_dist.npy"
+                    dir_path, "assets/brts/min_single_narrow_passage_brt_dist_12.npy"
                 )
             )
 
@@ -93,15 +94,14 @@ class SingleNarrowPassageEnv(gym.Env):
         # self.hist = []
 
     def reset(self, seed=None):
-        # while True:
-        #     self.car.x = np.random.uniform(
-        #         low=,
-        #         high=
-        #     )
+        while True:
+            self.car.x = np.random.uniform(
+                low=np.concatenate([np.array([-8.0, -2.0]) , self.grid.min[2:]]),
+                high=np.concatenate([np.array([-4.0, 0.0]) , self.grid.max[2:]]),
+            )
 
-        #     if self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.5:
-        #         break
-        self.car.x = np.array([-6, -1.4, 0, 1, 0], dtype=np.float32)
+            if self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.5:
+                break
         self.state = np.copy(self.car.x)
         return np.copy(self.car.x)
 
@@ -117,13 +117,6 @@ class SingleNarrowPassageEnv(gym.Env):
 
         if self.use_disturbances and self.eval:
             dist = self.opt_dist()
-            sol = odeint(
-                self.car.dynamics_non_hcl,
-                y0=self.car.x,
-                t=np.linspace(0, self.dt, 4),
-                args=(action, dist),
-                tfirst=True,
-            )
         elif self.use_disturbances and not self.eval:
             dist = np.array(
                 [
@@ -131,25 +124,18 @@ class SingleNarrowPassageEnv(gym.Env):
                     for i in range(len(self.car.dMax))
                 ]
             )
-            sol = odeint(
-                self.car.dynamics_non_hcl,
-                y0=self.car.x,
-                t=np.linspace(0, self.dt, 4),
-                args=(action, dist),
-                tfirst=True,
-            )
         else:
             dist = np.zeros(5)
-            sol = odeint(
-                self.car.dynamics_non_hcl,
-                y0=self.car.x,
-                t=np.linspace(0, self.dt, 4),
-                args=(action, dist),
-                tfirst=True,
+        self.car.x = (
+            self.car.dynamics_non_hcl(
+                0, self.car.x, action, dist
             )
-        self.car.x = sol[-1]
+            * self.dt
+            + self.car.x
+        )
+        # self.car.x = sol[-1]
         self.car.x[2] = self.normalize_angle(self.car.x[2])
-        self.car.x = np.clip(self.car.x, self.grid.min, self.grid.max)
+        # self.car.x = np.clip(self.car.x, self.grid.min, self.grid.max)
         self.state = np.copy(self.car.x)
 
         reward = -np.linalg.norm(self.state[:2] - self.goal_location)
@@ -158,21 +144,18 @@ class SingleNarrowPassageEnv(gym.Env):
         info = {}
         info["used_hj"] = used_hj
         if self.collision_curb_or_bounds():
-            print(f"colide curb or bounds, {self.state=}")
             if self.done_if_unsafe:
                 done = True
             info["cost"] = 1
             info["safe"] = False
             info["collision"] = "curb or oob"
         elif self.collision_car():
-            print(f"collision car: {self.state=}")
             if self.done_if_unsafe:
                 done = True
             info["cost"] = 1
             info["safe"] = False
             info["collision"] = "car"
         elif self.near_goal():
-            print("reach goal")
             done = True
             reward = 100.0
             info["reach_goal"] = True
@@ -196,13 +179,6 @@ class SingleNarrowPassageEnv(gym.Env):
 
         if self.use_disturbances and self.eval:
             dist = self.opt_dist()
-            sol = odeint(
-                self.car.dynamics_non_hcl,
-                y0=state,
-                t=np.linspace(0, self.dt, 4),
-                args=(action, dist),
-                tfirst=True,
-            )
         elif self.use_disturbances and not self.eval:
             dist = np.array(
                 [
@@ -210,25 +186,17 @@ class SingleNarrowPassageEnv(gym.Env):
                     for i in range(len(self.car.dMax))
                 ]
             )
-            sol = odeint(
-                self.car.dynamics_non_hcl,
-                y0=state,
-                t=np.linspace(0, self.dt, 4),
-                args=(action, dist),
-                tfirst=True,
-            )
         else:
             dist = np.zeros(5)
-            sol = odeint(
-                self.car.dynamics_non_hcl,
-                y0=state,
-                t=np.linspace(0, self.dt, 4),
-                args=(action, dist),
-                tfirst=True,
+        state = (
+            self.car.dynamics_non_hcl(
+                0, state, action, dist
             )
-        state = sol[-1]
-        state[2] = self.normalize_angle(state)
-        state = np.clip(state, self.grid.min, self.grid.max)
+            * self.dt
+            + state
+        )
+        state[2] = self.normalize_angle(state[2])
+        # state = np.clip(state, self.grid.min, self.grid.max)
 
         reward = -np.linalg.norm(state[:2] - self.goal_location)
 
@@ -250,7 +218,7 @@ class SingleNarrowPassageEnv(gym.Env):
         elif self.near_goal():
             print("reach goal")
             done = True
-            reward = 100.0
+            reward = 200.0
             info["reach_goal"] = True
 
         # cost is based on distance to obstacle
@@ -295,13 +263,6 @@ class SingleNarrowPassageEnv(gym.Env):
 
         self.ax.add_patch(stranded_car)
 
-        stranded_car_unsafe = plt.Circle(
-            brt_config.STRANDED_R2_POS,
-            radius=brt_config.L / 2,
-            color="r",
-        )
-        self.ax.add_patch(stranded_car_unsafe)
-
         goal = plt.Circle(
             brt_config.GOAL_POS, radius=brt_config.L, color="g", alpha=0.5
         )
@@ -322,7 +283,7 @@ class SingleNarrowPassageEnv(gym.Env):
             X,
             Y,
             self.brt[:, :, index[2], index[3], index[4]].transpose(),
-            levels=[0],
+            levels=[0.2],
         )
 
         self.ax.set_xlim(-8, 8)
@@ -370,13 +331,8 @@ class SingleNarrowPassageEnv(gym.Env):
     def collision_car(self, state=None):
         if not isinstance(state, np.ndarray):
             state = self.state
-        return (
-            min(
-                np.linalg.norm(state[:2] - brt_config.STRANDED_CAR_POS),
-                np.linalg.norm(state[:2] - brt_config.STRANDED_R2_POS),
-            )
-            <= self.car.length
-        )
+        return np.linalg.norm(state[:2] - brt_config.STRANDED_CAR_POS) <= self.car.length
+        
 
     def near_goal(self, state=None):
         if not isinstance(state, np.ndarray):
@@ -397,10 +353,10 @@ class SingleNarrowPassageEnv(gym.Env):
             state = self.state
         index = self.grid.get_index(state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
-        opt_dist = self.car.opt_dist_non_hcl(0, state, spat_deriv)
+        opt_dist = self.car.opt_dstb_non_hcl(0, state, spat_deriv)
         return opt_dist
 
-    def use_opt_ctrl(self, threshold=0.2):
+    def use_opt_ctrl(self, threshold=0.3):
         return self.grid.get_value(self.brt, self.state) < threshold
 
     def reward_penalty(self, state: np.array, action: np.array):
@@ -420,11 +376,6 @@ class SingleNarrowPassageEnv(gym.Env):
 
 
 if __name__ in "__main__":
-
-    import time
-    from atu.wrappers import RecordEpisodeStatisticsWithCost
-    import atu
-    from gym.wrappers import TransformObservation
     import gym
 
     env = SingleNarrowPassageEnv()
@@ -436,10 +387,6 @@ if __name__ in "__main__":
             action = env.opt_ctrl()
         else:
             action = env.action_space.sample()
-        # print(opt_ctrl)
-        # action = env.opt_ctrl()
         obs, reward, done, info = env.step(action)
+        print(obs)
         env.render()
-        # obs, reward, done, info = env.step([-2, opt_ctrl[1]])
-        # obs, reward, done, info = env.step(env.action_space.sample())
-        # time.sleep(0.4)

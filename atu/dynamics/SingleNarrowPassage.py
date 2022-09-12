@@ -7,7 +7,7 @@ class SingleNarrowPassage:
         self,
         x=[0, 0, 0, 0, 0],
         alpha_max=2.0,
-        alpha_min=-4.0,
+        alpha_min=-2.0,
         psi_max=3 * np.pi,
         psi_min=-3 * np.pi,
         length=2.0,
@@ -21,14 +21,14 @@ class SingleNarrowPassage:
         self.psi_min = psi_min
         self.length = length
 
-        if u_mode == "min" and d_mode == "max":
-            print("Control for reaching target set")
-        elif u_mode == "max" and d_mode == "min":
-            print("Control for avoiding target set")
-        else:
-            raise ValueError(
-                f"u_mode: {u_mode} and d_mode: {d_mode} are not opposite of each other!"
-            )
+        # if u_mode == "min" and d_mode == "max":
+        #     # print("Control for reaching target set")
+        # elif u_mode == "max" and d_mode == "min":
+        #     # print("Control for avoiding target set")
+        # else:
+        #     raise ValueError(
+        #         f"u_mode: {u_mode} and d_mode: {d_mode} are not opposite of each other!"
+        #     )
 
         self.u_mode = u_mode
         self.d_mode = d_mode

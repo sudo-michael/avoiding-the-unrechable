@@ -14,13 +14,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from stable_baselines3.common.buffers import ReplayBuffer
 from cost_buffer import CostReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
-
 import atu
 from atu.wrappers import RecordEpisodeStatisticsWithCost
-
 
 
 def parse_args():
@@ -48,18 +45,18 @@ def parse_args():
         help="Eval every x steps")
 
     # Algorithm specific arguments
-    # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
-    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway4D-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway4D-v0",
     # parser.add_argument("--env-id", type=str, default="Safe-SingleNarrowPassage-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=100_000,
         help="the replay memory buffer size")
-    parser.add_argument("--reach-avoid-buffer-size", type=int, default=10_000,
-        help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
+    parser.add_argument("--qc-gamma", type=float, default=0.99,
+        help="the discount factor qc-gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
@@ -84,16 +81,14 @@ def parse_args():
             help="Entropy regularization coefficient.")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
-    parser.add_argument("--scale-reward", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Scale reward to be in range [-1, 1]")
+    parser.add_argument("--lambda-multiplier", type=float, default=10,
+            help="Lagrange Multiplier For Constraint Violations")
+    parser.add_argument("--upper-bound", type=float, default=0,
+            help="Lagrange Multiplier For Constraint Violations")
     parser.add_argument("--use-hj", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use safety controller")
-    parser.add_argument("--uniform-sample-safe", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Sample uniform control")
     parser.add_argument("--use-dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Use disturbances")
-    parser.add_argument("--use-ra", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Use Reach Avoid Control")
     parser.add_argument("--reward-shape", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="pentalty for bad actions")
     parser.add_argument("--reward-shape-penalty", type=float, default=9.4069,
@@ -106,16 +101,14 @@ def parse_args():
         help="Use reward shaping based on gradVdotF")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Reset if unsafe")
-    parser.add_argument("--fake-next-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Use real_next_obs instead of sim step")
-    parser.add_argument("--train-dist", type=float, default=0.1,
-        help="Disturbance For Train")
+    parser.add_argument('--train-dist', type=lambda s: np.array([float(item) for item in s.split(',')]),
+        help="Training Disturbance")
     parser.add_argument("--train-speed", type=float, default=1.0,
-        help="Disturbance For Train")
-    parser.add_argument("--eval-dist", type=float, default=0.1,
-        help="Disturbance For Eval")
+        help="Training Speed")
+    parser.add_argument('--eval-dist', type=lambda s: np.array([float(item) for item in s.split(',')]),
+        help="Eval Disturbance")
     parser.add_argument("--eval-speed", type=float, default=1.0,
-        help="Disturbance For Train")
+        help="Eval Speed")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -123,41 +116,28 @@ def parse_args():
 
 def make_env(args, seed, capture_video, idx, run_name, eval=False):
     def thunk():
-        if "Hallway" in args.env_id:
-            if eval:
-                env = gym.make(
-                    args.env_id,
-                    use_reach_avoid=args.use_ra,
-                    done_if_unsafe=args.done_if_unsafe,
-                    use_disturbances=args.use_dist,
-                    dist=args.eval_dist,
-                    speed=args.eval_speed,
-                    eval=eval,
-                )
-            else:
-                env = gym.make(
-                    args.env_id,
-                    use_reach_avoid=args.use_ra,
-                    done_if_unsafe=args.done_if_unsafe,
-                    use_disturbances=args.use_dist,
-                    dist=args.train_dist,
-                    speed=args.train_speed,
-                )
+        if eval:
+            env = gym.make(
+                args.env_id,
+                done_if_unsafe=args.done_if_unsafe,
+                use_disturbances=args.use_dist,
+                dist=args.eval_dist,
+                speed=args.eval_speed,
+                eval=eval,
+            )
         else:
-            env = gym.make(args.env_id)
+            env = gym.make(
+                args.env_id,
+                done_if_unsafe=args.done_if_unsafe,
+                use_disturbances=args.use_dist,
+                dist=args.train_dist,
+                speed=args.train_speed,
+            )
         env = RecordEpisodeStatisticsWithCost(env)
         if capture_video:
             if idx == 0:
                 if eval:
                     env = gym.wrappers.RecordVideo(env, f"videos_eval/{run_name}")
-                # else:
-                #     env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-
-        # env = gym.wrappers.TransformObservation(
-        #     env, lambda obs: obs / env.world_boundary
-        # )
-        # env = gym.wrappers.NormalizeReward(env)
-        # env = gym.wrappers.NormalizeObservation(env)
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -277,6 +257,7 @@ if __name__ == "__main__":
             )
         ]
     )
+
     eval_envs = gym.vector.SyncVectorEnv(
         [
             make_env(
@@ -308,6 +289,16 @@ if __name__ == "__main__":
     )
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
+    qcf1 = SoftQNetwork(envs).to(device)
+    qcf2 = SoftQNetwork(envs).to(device)
+    qcf1_target = SoftQNetwork(envs).to(device)
+    qcf2_target = SoftQNetwork(envs).to(device)
+    qcf1_target.load_state_dict(qcf1.state_dict())
+    qcf2_target.load_state_dict(qcf2.state_dict())
+    qc_optimizer = optim.Adam(
+        list(qcf1.parameters()) + list(qcf2.parameters()), lr=args.q_lr # TODO make sepearet arg
+    )
+
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -torch.prod(
@@ -319,17 +310,20 @@ if __name__ == "__main__":
     else:
         alpha = args.alpha
 
-    envs.single_observation_space.dtype = np.float32
-    rb = ReplayBuffer(
-        args.buffer_size,
-        envs.single_observation_space,
-        envs.single_action_space,
-        device,
-        handle_timeout_termination=True,
-    )
 
-    rb_reach_avoid = ReplayBuffer(
-        args.reach_avoid_buffer_size,
+    log_lambda = torch.tensor(
+        np.log(args.lambda_multiplier, dtype=np.float32),
+        requires_grad=True,
+        device=device,
+    )
+    lambda_multiplier = log_lambda.exp().item()
+    lambda_optimizer = optim.Adam(
+        [log_lambda], lr=args.q_lr * 0.1
+    )  # slow down lag multiplier
+
+    envs.single_observation_space.dtype = np.float32
+    rb = CostReplayBuffer(
+        args.buffer_size,
         envs.single_observation_space,
         envs.single_action_space,
         device,
@@ -346,6 +340,7 @@ if __name__ == "__main__":
         total_episodic_unsafe = 0
         total_reach_goal = 0
         total_hj_at_collision = 0
+        collision_count = 0
         for episode in range(episodes):
             obs = envs.reset()
             done = False
@@ -364,28 +359,32 @@ if __name__ == "__main__":
                         total_episodic_unsafe += info["episode"]["us"]
                         total_reach_goal += info.get("reach_goal", False)
                         done = True
-                        if not info.get('reach_goal', False) and not info.get('TimeLimit.truncated', False):
-                            total_hj_at_collision += info['hj_value']
-
+                        if not info.get("reach_goal", False) and not info.get(
+                            "TimeLimit.truncated", False
+                        ):
+                            total_hj_at_collision += info["hj_value"]
+                            collision_count += 1
 
         print(
             f"eval: average return: {total_episodic_return / episodes} average cost: {total_episodic_cost / episodes} average unsafe = {total_episodic_unsafe / episodes} average reach goal = {total_reach_goal / episodes}"
         )
         actor.train()
 
+        avg_hj = 0
+        if collision_count > 0:
+            avg_hj = total_hj_at_collision / collision_count
         return {
             "average_return": total_episodic_return / episodes,
             "average_cost": total_episodic_cost / episodes,
             "average_unsafe": total_episodic_unsafe / episodes,
             "average_reach_goal": total_reach_goal / episodes,
-            "average_hj_at_collision": total_hj_at_collision / episodes,
+            "average_hj_at_collision": avg_hj,
         }
 
     # TRY NOT TO MODIFY: start the game
     obs = envs.reset()
-    thj = 0
+    thj = 0  # wrapper didn't work
     for global_step in range(args.total_timesteps):
-
         # envs.envs[0].render(mode='human')
         used_hj = False
         if args.use_hj:
@@ -400,22 +399,16 @@ if __name__ == "__main__":
 
             actions = actions.detach().cpu().numpy()
 
+            costs = np.array([0.0])
+
             if args.use_hj:
                 for idx, env in enumerate(envs.envs):
-                    if args.uniform_sample_safe:
-                        if env.use_opt_ctrl(threshold=0.15):
-                            opt_ctrl = env.safe_ctrl()
-                            used_hj = True
-                            og_actions.append((idx, copy.deepcopy(actions[idx])))
-                            actions[idx] = opt_ctrl
-                            thj += 1
-                    else:
-                        if env.use_opt_ctrl():
-                            opt_ctrl = env.opt_ctrl()
-                            used_hj = True
-                            og_actions.append((idx, copy.deepcopy(actions[idx])))
-                            actions[idx] = opt_ctrl
-                            thj += 1
+                    if env.use_opt_ctrl():
+                        opt_ctrl = env.opt_ctrl()
+                        used_hj = True
+                        actions[idx] = opt_ctrl
+                        costs[idx] = 1.0
+                        thj += 1
 
             # print(obs, used_hj, actions, envs.envs[0].action_safe(obs[0], actions[0]))
 
@@ -425,12 +418,6 @@ if __name__ == "__main__":
         next_obs, rewards, dones, infos = envs.step(
             [{"used_hj": used_hj, "actions": actions}]
         )
-
-        # print(infos[0]['hj_value'])
-
-        # for info in infos:
-        #     if info.get("cost", 0) or not info.get("safe", True):
-        #         print(f"safety violation: {obs}")
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         for info in infos:
@@ -469,10 +456,14 @@ if __name__ == "__main__":
                     "charts/total_use_hj", info["episode"]["thj"], global_step
                 )
 
-                # if not reach goal 
-                if not info.get('reach_goal', False) and dones[0] and not info.get('TimeLimit.truncated', False):
-                    print(obs)
-                    print('collision')
+                if (
+                    not info.get("reach_goal", False)
+                    and dones[0]
+                    and not info.get("TimeLimit.truncated", False)
+                ):
+                    print(f"DEBUG collision: {obs=}")
+                    print(f"DEBUG {info['hj_value']=}")
+                    print(f"DEBUG {info['collision']=}")
                     writer.add_scalar(
                         "charts/hj_at_collision", info["hj_value"], global_step
                     )
@@ -483,92 +474,7 @@ if __name__ == "__main__":
         for idx, d in enumerate(dones):
             if d:
                 real_next_obs[idx] = infos[idx]["terminal_observation"]
-        rb.add(obs, real_next_obs, actions, rewards, dones, infos)
-
-        if args.reward_shape and len(og_actions):
-            # penalize for taking original action instead of opt ctrl
-            reward_shape_actions = copy.deepcopy(actions)
-            reward_shape_rewards = copy.deepcopy(rewards)
-            for idx, og_action in og_actions:
-                sim_next_obs, sim_rew, sim_done, sim_info = envs.envs[
-                    idx
-                ].simulate_step(np.copy(obs[idx]), og_action)
-                # rescale obseration
-                # sim_next_obs /= envs.envs[idx].world_boundary
-
-                # # DEBUG
-                # dbg_next_obs, dbg_rew, dbg_done, db_info = envs.envs[idx].simulate_step(
-                #     np.copy(obs[idx]), actions[idx]
-                # )
-                # # # dbg_next_obs /= envs.envs[idx].world_boundary
-                # if not np.allclose(dbg_next_obs, real_next_obs[idx]):
-                #     print(dbg_next_obs)
-                #     print(real_next_obs[idx])
-                #     breakpoint()
-                # assert np.all(dbg_next_obs == real_next_obs[idx]), print(
-                #     dbg_next_obs, real_next_obs[idx]
-                # )
-                # # DEBUG
-
-                reward_shape_actions[idx] = og_action
-                if args.reward_shape_gradv and args.seperate_cost:
-                    gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
-                    cost = -args.reward_shape_penalty
-                    cost += min(gradVdotFxu, 0) * args.reward_shape_gradv_takeover
-                    assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
-                    writer.add_scalar("charts/reward_shape_cost", cost, global_step)
-                    writer.add_scalar("charts/gradVdotFxu", gradVdotFxu, global_step)
-                    reward_shape_rewards[idx] += cost
-                elif args.reward_shape_gradv:
-                    gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
-                    # min(gardVdotFxu, 0) since there shouldn't be a penalty for taking a safe action
-                    # adding args.reward_shape_gradv_takeover since not penalizing for using hj
-                    # isn't desincentivising agent from learning how to take unsafe action
-                    cost = args.reward_shape_penalty * min(
-                        gradVdotFxu, args.reward_shape_gradv_takeover
-                    )
-
-                    assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
-                    writer.add_scalar("charts/reward_shape_cost", cost, global_step)
-                    writer.add_scalar("charts/gradVdotFxu", gradVdotFxu, global_step)
-                    reward_shape_rewards[idx] += cost
-                else:
-                    # previously had a bug of
-                    # reward_shape_rewards[idx] -= envs.envs[idx].min_reward # bad since min_reward was negative
-                    cost = -args.reward_shape_penalty
-                    reward_shape_rewards[idx] += cost
-                    writer.add_scalar("charts/reward_shape_cost", cost, global_step)
-
-            # since only 1 instance, just wrapping everything in lists
-            if args.fake_next_obs:
-                rb.add(
-                    obs,
-                    real_next_obs,
-                    reward_shape_actions,
-                    reward_shape_rewards,
-                    dones,
-                    infos,
-                )
-            else:
-                rb.add(
-                    obs,
-                    [sim_next_obs],
-                    reward_shape_actions,
-                    reward_shape_rewards,
-                    dones,
-                    infos,
-                )
-
-        if args.use_ra:
-            opt_ctrl = np.array([env.opt_ctrl() for env in envs.envs], dtype=np.float32)
-            rb_reach_avoid.add(
-                obs,
-                real_next_obs,
-                opt_ctrl,
-                rewards,
-                dones,
-                infos,
-            )
+        rb.add(obs, real_next_obs, actions, rewards, costs, dones, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
@@ -590,6 +496,16 @@ if __name__ == "__main__":
                     1 - data.dones.flatten()
                 ) * args.gamma * (min_qf_next_target).view(-1)
 
+
+                qcf1_next_target = qcf1_target(data.next_observations, next_state_actions)
+                qcf2_next_target = qcf2_target(data.next_observations, next_state_actions)
+
+                max_qcf_next_target = torch.max(qcf1_next_target, qcf2_next_target)
+
+                next_qc_value = data.costs.flatten() + (
+                    1 - data.dones.flatten()
+                ) * args.qc_gamma * (max_qcf_next_target).view(-1)
+
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
@@ -603,6 +519,22 @@ if __name__ == "__main__":
             )
             q_optimizer.step()
 
+            qcf1_a_values = qcf1(data.observations, data.actions).view(-1)
+            qcf2_a_values = qcf2(data.observations, data.actions).view(-1)
+
+            qc1_loss = F.mse_loss(qcf1_a_values, next_qc_value)
+            qc2_loss = F.mse_loss(qcf2_a_values, next_qc_value)
+            qc_loss = (qc1_loss + qc2_loss) / 2
+            qc_optimizer.zero_grad()
+            qc_loss.backward()
+
+            nn.utils.clip_grad_norm_(
+                list(qcf1.parameters()) + list(qcf2.parameters()),
+                args.max_grad_norm,
+            )
+
+            qc_optimizer.step()
+
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(
                     args.policy_frequency
@@ -611,7 +543,14 @@ if __name__ == "__main__":
                     qf1_pi = qf1(data.observations, pi)
                     qf2_pi = qf2(data.observations, pi)
                     min_qf_pi = torch.min(qf1_pi, qf2_pi).view(-1)
-                    actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
+
+                    qcf1_pi = qcf1(data.observations, pi)
+                    qcf2_pi = qcf2(data.observations, pi)
+                    max_qcf_pi = torch.max(qcf1_pi, qcf2_pi)
+
+                    actor_loss = ((alpha * log_pi) - min_qf_pi
+                        + lambda_multiplier * max_qcf_pi - args.upper_bound
+                    ).mean()
 
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
@@ -630,6 +569,22 @@ if __name__ == "__main__":
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
 
+                    with torch.no_grad():
+                        pi, _, _ = actor.get_action(data.observations)
+                        qcf1_pi = qcf1(data.observations, pi)
+                        qcf2_pi = qcf2(data.observations, pi)
+                        max_qf_safe_pi = torch.max(qcf1_pi, qcf2_pi)
+
+                    lambda_multiplier_loss = (
+                        log_lambda * (args.upper_bound - max_qf_safe_pi).mean()
+                    )
+
+                    lambda_optimizer.zero_grad()
+                    lambda_multiplier_loss.backward()
+                    lambda_optimizer.step()
+                    lambda_multiplier = log_lambda.exp().item()
+
+
             # update the target networks
             if global_step % args.target_network_frequency == 0:
                 for param, target_param in zip(
@@ -645,6 +600,19 @@ if __name__ == "__main__":
                         args.tau * param.data + (1 - args.tau) * target_param.data
                     )
 
+                for param, target_param in zip(
+                    qcf1.parameters(), qcf1_target.parameters()
+                ):
+                    target_param.data.copy_(
+                        args.tau * param.data + (1 - args.tau) * target_param.data
+                    )
+                for param, target_param in zip(
+                    qcf2.parameters(), qcf2_target.parameters()
+                ):
+                    target_param.data.copy_(
+                        args.tau * param.data + (1 - args.tau) * target_param.data
+                    )
+
             if global_step % 100 == 0:
                 writer.add_scalar(
                     "losses/qf1_values", qf1_a_values.mean().item(), global_step
@@ -652,9 +620,18 @@ if __name__ == "__main__":
                 writer.add_scalar(
                     "losses/qf2_values", qf2_a_values.mean().item(), global_step
                 )
+                writer.add_scalar(
+                    "losses/qcf1_values", qcf1_a_values.mean().item(), global_step
+                )
+                writer.add_scalar(
+                    "losses/qcf2_values", qcf2_a_values.mean().item(), global_step
+                )
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item(), global_step)
+                writer.add_scalar("losses/qc1f_loss", qc1_loss.item(), global_step)
+                writer.add_scalar("losses/qc2f_loss", qc2_loss.item(), global_step)
+                writer.add_scalar("losses/qc_loss", qc_loss.item(), global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 writer.add_scalar("losses/alpha", alpha, global_step)
                 writer.add_scalar(
@@ -666,6 +643,11 @@ if __name__ == "__main__":
                     writer.add_scalar(
                         "losses/alpha_loss", alpha_loss.item(), global_step
                     )
+
+                writer.add_scalar("losses/lambda", lambda_multiplier, global_step)
+                writer.add_scalar(
+                    "losses/lambda_loss", lambda_multiplier_loss.item(), global_step
+                )
 
                 writer.add_scalar("charts/thj", thj, global_step)
 

@@ -38,7 +38,7 @@ class DubinsHallwayEnv(gym.Env):
         if self.use_disturbances and np.any(dist) > 0:
             print("using disturbances")
             print(f"{dist=}")
-            assert len(dist) == 4
+            assert len(dist) == 3
             self.car = car_brt
             self.car.speed = speed
             self.car.dMax = dist

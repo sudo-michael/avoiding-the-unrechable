@@ -48,12 +48,12 @@ def parse_args():
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway4D-v0",
+    # parser.add_argument("--env-id", type=str, default="Safe-SingleNarrowPassage-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=125_000,
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=100_000,
-        help="the replay memory buffer size")
-    parser.add_argument("--reach-avoid-buffer-size", type=int, default=10_000,
         help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
@@ -87,28 +87,26 @@ def parse_args():
         help="Use safety controller")
     parser.add_argument("--use-dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Use disturbances")
-    parser.add_argument("--use-ra", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Use Reach Avoid Control")
     parser.add_argument("--reward-shape", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="pentalty for bad actions")
     parser.add_argument("--reward-shape-penalty", type=float, default=9.4069,
         help="reward pentalty for hj takeover")
-    parser.add_argument("--reward-shape-gradv", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--reward-shape-gradv", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="Use reward shaping based on gradVdotF")
     parser.add_argument("--reward-shape-gradv-takeover", type=float, default=-0.5,
         help="input for min(gradVdotF, x) (cost for using hj")
+    parser.add_argument("--seperate-cost", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="Use reward shaping based on gradVdotF")
     parser.add_argument("--done-if-unsafe", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Reset if unsafe")
-    parser.add_argument("--fake-next-obs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="Use real_next_obs instead of sim step")
-    parser.add_argument("--train-dist", type=float, default=0.1,
-        help="Disturbance For Train")
+    parser.add_argument('--train-dist', type=lambda s: np.array([float(item) for item in s.split(',')]),
+        help="Training Disturbance")
     parser.add_argument("--train-speed", type=float, default=1.0,
-        help="Disturbance For Train")
-    parser.add_argument("--eval-dist", type=float, default=0.1,
-        help="Disturbance For Eval")
+        help="Training Speed")
+    parser.add_argument('--eval-dist', type=lambda s: np.array([float(item) for item in s.split(',')]),
+        help="Eval Disturbance")
     parser.add_argument("--eval-speed", type=float, default=1.0,
-        help="Disturbance For Train")
+        help="Eval Speed")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -116,27 +114,23 @@ def parse_args():
 
 def make_env(args, seed, capture_video, idx, run_name, eval=False):
     def thunk():
-        if "Hallway" in args.env_id:
-            if eval:
-                env = gym.make(
-                    args.env_id,
-                    use_reach_avoid=args.use_ra,
-                    done_if_unsafe=args.done_if_unsafe,
-                    use_disturbances=args.use_dist,
-                    dist=args.eval_dist,
-                    speed=args.eval_speed,
-                )
-            else:
-                env = gym.make(
-                    args.env_id,
-                    use_reach_avoid=args.use_ra,
-                    done_if_unsafe=args.done_if_unsafe,
-                    use_disturbances=args.use_dist,
-                    dist=args.train_dist,
-                    speed=args.train_speed,
-                )
+        if eval:
+            env = gym.make(
+                args.env_id,
+                done_if_unsafe=args.done_if_unsafe,
+                use_disturbances=args.use_dist,
+                dist=args.eval_dist,
+                speed=args.eval_speed,
+                eval=eval,
+            )
         else:
-            env = gym.make(args.env_id)
+            env = gym.make(
+                args.env_id,
+                done_if_unsafe=args.done_if_unsafe,
+                use_disturbances=args.use_dist,
+                dist=args.train_dist,
+                speed=args.train_speed,
+            )
         env = RecordEpisodeStatisticsWithCost(env)
         if capture_video:
             if idx == 0:
