@@ -45,12 +45,12 @@ class SingleNarrowPassageEnv(gym.Env):
             self.max_over_min_brt = np.load(
                 os.path.join(
                     dir_path,
-                    "assets/brts/max_over_min_single_narrow_passage_brt_dist_12.npy",
+                    "assets/brts/max_over_min_single_narrow_passage_brt_dist_3.npy",
                 )
             )
             self.brt = np.load(
                 os.path.join(
-                    dir_path, "assets/brts/min_single_narrow_passage_brt_dist_12.npy"
+                    dir_path, "assets/brts/min_single_narrow_passage_brt_dist_3.npy"
                 )
             )
 
