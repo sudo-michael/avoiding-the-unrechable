@@ -2,7 +2,7 @@ import gym
 import os
 from gym.spaces import Box
 from atu.brt.brt_3D import g as grid
-from atu.brt.brt_3D import car_brt
+from atu.brt.brt_3D import car_brt, car_ra
 from atu.utils import spa_deriv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -24,6 +24,7 @@ class DubinsHallwayEnv(gym.Env):
         self,
         done_if_unsafe=True,
         use_disturbances=True,
+        use_ra=False,
         goal_location=np.array([-2, 2.3, 0.5]),
         dist=np.array([0.1, 0.1, 0.1]),
         speed=1,
@@ -31,25 +32,29 @@ class DubinsHallwayEnv(gym.Env):
     ) -> None:
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
+        self.use_ra = use_ra
         self.eval = eval
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        if self.use_disturbances and np.any(dist) > 0:
-            print("using disturbances")
-            print(f"{dist=}")
-            assert len(dist) == 3
-            self.car = car_brt
-            self.car.speed = speed
-            self.car.dMax = dist
-            self.car.dMin = -dist
-            self.max_over_min_brt = np.load(
-                os.path.join(dir_path, "assets/brts/max_over_min_hallway_brt_dist.npy")
-            )
-            self.brt = np.load(
-                os.path.join(dir_path, "assets/brts/min_hallway_brt_dist.npy")
-            )
+        if self.use_ra:
+            self.ra = np.load(os.path.join(dir_path, "assets/ras/hallway_dist.npy"))
+            self.car_ra = car_ra
 
+        if self.use_disturbances and np.any(dist) > 0:
+                print("using disturbances")
+                print(f"{dist=}")
+                assert len(dist) == 3
+                self.car = car_brt
+                self.car.speed = speed
+                self.car.dMax = dist
+                self.car.dMin = -dist
+                self.max_over_min_brt = np.load(
+                    os.path.join(dir_path, "assets/brts/max_over_min_hallway_brt_dist.npy")
+                )
+                self.brt = np.load(
+                    os.path.join(dir_path, "assets/brts/min_hallway_brt_dist.npy")
+                )
         else:
             print("not using disturbances")
             self.car = car_brt
@@ -98,7 +103,7 @@ class DubinsHallwayEnv(gym.Env):
             self.car.x = np.random.uniform(
                 low=-self.world_boundary,
                 # reset in bottom left-half of map
-                high=np.array([0.0, -0.5, np.pi]),
+                high=np.array([-1.5, -1.5, np.pi]),
             )
 
             if (
@@ -193,7 +198,7 @@ class DubinsHallwayEnv(gym.Env):
             info["collision"] = "wall"
         elif self.near_goal():
             done = True
-            reward = 100.0
+            reward = 250
             info["reach_goal"] = True
 
         # cost is based on distance to obstacle
@@ -340,7 +345,7 @@ class DubinsHallwayEnv(gym.Env):
         # brt
         X, Y = np.meshgrid(
             np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
-            np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
+            np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]), indexing='ij'
         )
 
         index = self.grid.get_index(self.state)
@@ -351,7 +356,7 @@ class DubinsHallwayEnv(gym.Env):
         self.ax.contour(
             X,
             Y,
-            self.brt[:, :, index[2]].transpose(),
+            self.brt[:, :, index[2]],
             levels=[0.2],
         )
 
@@ -442,21 +447,47 @@ class DubinsHallwayEnv(gym.Env):
         gradVdotFxu = self.reward_penalty(obs, action)
         return gradVdotFxu >= 0
 
+    def ra_ctrl(self):
+        index = self.grid.get_index(self.state)
+        ra = self.ra
+        spat_deriv = spa_deriv(index, ra, self.grid)
+        opt_ctrl = self.car_ra.opt_ctrl_non_hcl(0, self.state, spat_deriv)
+        return opt_ctrl
+
+    def brt_value(self, obs):
+        return self.grid.get_value(self.max_over_min_brt, obs)
+        
+        
+
 
 if __name__ in "__main__":
     import gym
 
-    env = gym.make("Safe-DubinsHallway-v1", use_reach_avoid=True, use_disturbances=True)
+    env = gym.make("Safe-DubinsHallway-v2", use_disturbances=True)
 
-    obs = env.reset()
-    done = False
-    while not done:
-        if env.use_opt_ctrl():
-            action = env.safe_ctrl()
-        else:
-            action = env.action_space.sample()
-        next_obs, reward, done, info = env.step(action)
-        if done:
-            print(info)
-            break
+    for _ in range(1):
+        obs = env.reset()
+        env.render()
+        input()
+        done = False
+        t = 0
+        r = 0
+        diff = 0
+        rp = 0
+        while not done:
+            action = -env.opt_ctrl()
+            next_obs, reward, done, info = env.step(action)
+            # print(env.brt_value(obs), env.brt_value(next_obs), abs(env.brt_value(obs)-env.brt_value(next_obs)), env.reward_penalty(obs, action))
+            print(abs(env.brt_value(obs)-env.brt_value(next_obs)), env.reward_penalty(obs, action))
+            diff += abs(env.brt_value(obs)-env.brt_value(next_obs))
+            rp += env.reward_penalty(obs, action)
+            obs=  next_obs
+            r += reward
+            t += 1
+            if done:
+                print(reward)
+                print(info, t, r)
+                break
     env.close()
+
+    print(diff / t, rp / t)

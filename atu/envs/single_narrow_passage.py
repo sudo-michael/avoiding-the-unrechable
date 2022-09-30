@@ -45,12 +45,12 @@ class SingleNarrowPassageEnv(gym.Env):
             self.max_over_min_brt = np.load(
                 os.path.join(
                     dir_path,
-                    "assets/brts/max_over_min_single_narrow_passage_brt_dist_3.npy",
+                    "assets/brts/max_over_min_single_narrow_passage_brt_dist_4.npy",
                 )
             )
             self.brt = np.load(
                 os.path.join(
-                    dir_path, "assets/brts/min_single_narrow_passage_brt_dist_3.npy"
+                    dir_path, "assets/brts/min_single_narrow_passage_brt_dist_4.npy"
                 )
             )
 
@@ -100,7 +100,7 @@ class SingleNarrowPassageEnv(gym.Env):
                 high=np.concatenate([np.array([-4.0, 0.0]) , self.grid.max[2:]]),
             )
 
-            if self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.5:
+            if self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.4:
                 break
         self.state = np.copy(self.car.x)
         return np.copy(self.car.x)

@@ -2,7 +2,7 @@ import gym
 import os
 from gym.spaces import Box
 from atu.brt.brt_4D import g as grid
-from atu.brt.brt_4D import car_brt
+from atu.brt.brt_4D import car_brt, car_ra
 from atu.utils import spa_deriv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,6 +22,7 @@ class DubinsHallway4DEnv(gym.Env):
         self,
         done_if_unsafe=True,
         use_disturbances=True,
+        use_ra=True,
         goal_location=np.array([-2, 2.3, 0.5]),
         dist=np.array([0.1, 0.1, 0.1, 0.1]),
         speed=1,
@@ -29,10 +30,15 @@ class DubinsHallway4DEnv(gym.Env):
     ) -> None:
         self.done_if_unsafe = done_if_unsafe
         self.use_disturbances = use_disturbances
+        self.use_ra = use_ra
         self.eval = eval
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
+        if self.use_ra:
+            self.ra = np.load(os.path.join(dir_path, "assets/ras/hallway_4Ddist.npy"))
+            self.car_ra = car_ra
+            
         if self.use_disturbances and np.any(dist) > 0:
             print("using disturbances")
             print(f"{dist=}")
@@ -442,58 +448,34 @@ class DubinsHallway4DEnv(gym.Env):
     def use_opt_ctrl(self, threshold=0.1, threshold_ra=0.0):
         return self.grid.get_value(self.max_over_min_brt, self.state) < threshold
 
+    def ra_ctrl(self):
+        index = self.grid.get_index(self.state)
+        ra = self.ra
+        spat_deriv = spa_deriv(index, ra, self.grid)
+        opt_ctrl = self.car_ra.opt_ctrl_non_hcl(0, self.state, spat_deriv)
+        return opt_ctrl
+
 
 if __name__ in "__main__":
     import gym
 
-    # def run_one_episode():
-    #     env = gym.make(
-    #         "Safe-DubinsHallway4D-v0", use_reach_avoid=False, use_disturbances=True
-    #     )
+    env = gym.make("Safe-DubinsHallway4D-v1", use_ra=True, use_disturbances=True)
 
-    #     # env = gym.wrappers.RecordVideo(env, 'tmp/')
-    #     obs = env.reset()
-    #     done = False
-    #     while not done:
-    #         env.render()
-    #         if env.use_opt_ctrl():
-    #             action = env.safe_ctrl()
-    #         else:
-    #             action = env.action_space.sample()
-    #         next_obs, reward, done, info = env.step(action)
-    #         if done:
-    #             break
-    #     steps = env._elapsed_steps
-    #     env.close()
-    #     return steps
-
-    # from timeit import default_timer as timer
-
-    # start = timer()
-    # steps = run_one_episode()
-    # end = timer()
-    # print((end - start) / steps)
-
-    env = DubinsHallway4DEnv(use_disturbances=True)
-    obs = env.reset()
-
-    obs = np.array([-3.2, -3.2, 0.8, -np.pi * 3/4])
-    env.state = np.copy(obs)
-    env.car.x = np.copy(obs)
-
-    hj = []
-
-    # print(obs)
-    done = False
-    while not done:
-        # print(obs)
-        if env.use_opt_ctrl():
-            action = env.opt_ctrl()
-        else:
-            action = env.action_space.sample()
-        next_obs, reward, done, info = env.step(action)
-        hj.append(info['hj_value'])
-        print(info["hj_value"], action)
-        obs = next_obs
-        env.render()
+    rws = []
+    for _ in range(10):
+        obs = env.reset()
+        done = False
+        t = 0
+        r = 0
+        while not done:
+            action = env.ra_ctrl()
+            next_obs, reward, done, info = env.step(action)
+            r += reward
+            t += 1
+            if done:
+                print(reward)
+                print(info, t, r)
+                rws.append(r)
+                break
+    print(sum(rws) / 10, rws) # around -1050
     env.close()

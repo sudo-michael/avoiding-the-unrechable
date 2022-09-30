@@ -100,4 +100,37 @@ if __name__ in "__main__":
         else:
             np.save("./atu/envs/assets/brts/max_over_min_hallway_brt.npy", result)
 
-    brt(d=True)
+    # brt(d=True)
+    def ra(d=False):
+        lookback_length = 15.0
+        t_step = 0.05
+        small_number = 1e-5
+        tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
+        compMethods = { "TargetSetMode": "minVWithVTarget",
+                        "ObstacleSetMode": "maxVWithObstacle"}
+
+
+        if d:
+            car_brt.dMax = dist
+            car_brt.dMix = -dist
+
+
+        result = HJSolver(
+            car_ra,
+            g,
+            [Goal, Initial_value_f],
+            tau,
+            compMethods,
+            PlotOptions(
+                do_plot=True, plot_type="3d_plot", plotDims=[0, 1, 2], slicesCut=[]
+            ),
+            saveAllTimeSteps=False,
+        )
+
+        if d:
+            np.save("./atu/envs/assets/ras/hallway_dist.npy", result)
+        else:
+            np.save("./atu/envs/assets/ras/hallway.npy", result)
+
+        
+    ra(d=True)

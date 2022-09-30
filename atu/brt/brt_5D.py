@@ -15,8 +15,7 @@ g = Grid(
     np.array([40, 40, 20, 20, 20]),
     [2, 4],
 )
-
-L = 1.00
+L = 1.25
 CURB_POSITION = np.array([-2.8, 2.8])
 WALL_POSITION = np.array([-8.0, 8.0])
 STRANDED_CAR_POS = np.array([0.0, -1.8])
