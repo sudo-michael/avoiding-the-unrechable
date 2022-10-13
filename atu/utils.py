@@ -56,4 +56,7 @@ def spa_deriv(index, V, g):
 
         spa_derivatives.append((left_deriv + right_deriv) / 2)
 
+    # print(spa_derivatives)
+    # if isinstance(spa_derivatives[0], np.ndarray):
+    #     breakpoint()
     return np.array(spa_derivatives)

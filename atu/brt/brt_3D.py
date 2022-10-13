@@ -7,7 +7,9 @@ g = Grid(
     np.array([-4.5, -4.5, -np.pi]),
     np.array([4.5, 4.5, np.pi]),
     3,
-    np.array([80, 80, 80]),
+    np.array([80, 80, 80
+
+]),
     [2],
 )
 dist = np.array([0.1, 0.1, 0.1])

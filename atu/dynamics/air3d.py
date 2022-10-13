@@ -61,7 +61,7 @@ class Air3D:
         x3_dot = hcl.scalar(0, "x3_dot")
 
         x1_dot[0] = -self.ve + self.vp * hcl.cos(state[2]) + u_opt[0] * state[1]
-        x2_dot[0] = self.vp * hcl.sin(state[2]) - d_opt[0] * state[0]
+        x2_dot[0] = self.vp * hcl.sin(state[2]) - u_opt[0] * state[0]
         x3_dot[0] = d_opt[0] - u_opt[0]
 
         return x1_dot, x2_dot, x3_dot

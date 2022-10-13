@@ -103,6 +103,7 @@ class SingleNarrowPassageEnv(gym.Env):
             if self.grid.get_value(self.max_over_min_brt, self.car.x) > 0.4:
                 break
         self.state = np.copy(self.car.x)
+        self.v_sm1 = self.grid.get_value(self.max_over_min_brt, self.car.x)
         return np.copy(self.car.x)
 
     def step(self, action: np.array):
@@ -162,6 +163,8 @@ class SingleNarrowPassageEnv(gym.Env):
 
         # cost is based on distance to obstacle
         info["hj_value"] = self.grid.get_value(self.brt, self.state)
+        info['hj_dt'] = self.v_sm1 - info['hj_value']
+        self.v_sm1 = info['hj_value']
 
         # self.hist.append(np.copy(self.state))
 

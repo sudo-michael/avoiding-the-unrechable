@@ -45,7 +45,7 @@ def parse_args():
         help="Eval every x steps")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v1",
+    parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway-v2",
     # parser.add_argument("--env-id", type=str, default="Safe-DubinsHallway4D-v0",
     # parser.add_argument("--env-id", type=str, default="Safe-SingleNarrowPassage-v0",
         help="the id of the environment")
@@ -53,13 +53,13 @@ def parse_args():
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=100_000,
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, default=0.99,
+    parser.add_argument("--gamma", type=float, default=0.9,
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
     parser.add_argument("--max-grad-norm", type=float, default=0.5,
         help="the maximum norm for the gradient clipping")
-    parser.add_argument("--batch-size", type=int, default=256,
+    parser.add_argument("--batch-size", type=int, default=512,
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
         help="the scale of exploration noise")
@@ -75,7 +75,7 @@ def parse_args():
         help="the frequency of updates for the target nerworks")
     parser.add_argument("--noise-clip", type=float, default=0.5,
         help="noise clip parameter of the Target Policy Smoothing Regularization")
-    parser.add_argument("--alpha", type=float, default=0.2,
+    parser.add_argument("--alpha", type=float, default=0.3,
             help="Entropy regularization coefficient.")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
@@ -84,6 +84,8 @@ def parse_args():
     parser.add_argument("--use-dist", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Use disturbances")
     parser.add_argument("--reward-shape", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="pentalty for bad actions")
+    parser.add_argument("--brt-shape", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="pentalty for bad actions")
     parser.add_argument("--reward-shape-penalty", type=float, default=9.4069,
         help="reward pentalty for hj takeover")
@@ -128,6 +130,8 @@ def make_env(args, seed, capture_video, idx, run_name, eval=False):
                 speed=args.train_speed,
             )
         env = RecordEpisodeStatisticsWithCost(env)
+        # TODO fingure how to noramlize
+        # env = gym.wrappers.TransformReward(env, lambda r: r / 100.0)
         if capture_video:
             if idx == 0:
                 if eval:
@@ -447,6 +451,11 @@ if __name__ == "__main__":
         for idx, d in enumerate(dones):
             if d:
                 real_next_obs[idx] = infos[idx]["terminal_observation"]
+        
+        if args.brt_shape:
+            next_obs_brt_v = envs.envs[0].brt_value(real_next_obs[0])
+            obs_brt_v = envs.envs[0].brt_value(obs[0])
+            rewards[0] += args.reward_shape_penalty * min(next_obs_brt_v - obs_brt_v, 0)
         rb.add(obs, real_next_obs, actions, rewards, dones, infos)
 
         if args.reward_shape and len(og_actions):
@@ -478,7 +487,8 @@ if __name__ == "__main__":
                     gradVdotFxu = envs.envs[idx].reward_penalty(obs[idx], og_action)
                     cost = -args.reward_shape_penalty
                     cost += min(gradVdotFxu, 0) * args.reward_shape_gradv_takeover
-                    assert cost <= 0, f"{cost=} must be not positive: {gradVdotFxu=}"
+                    # TODO add back assert
+                    # assert cost < 0, f"{cost=} must be not positive: {gradVdotFxu=}"
                     writer.add_scalar("charts/reward_shape_cost", cost, global_step)
                     writer.add_scalar("charts/gradVdotFxu", gradVdotFxu, global_step)
                     reward_shape_rewards[idx] += cost
@@ -622,7 +632,6 @@ if __name__ == "__main__":
             writer.add_scalar(
                 "eval/hj_at_collision", stats["average_hj_at_collision"], global_step
             )
-
     stats = eval_policy(eval_envs, actor)
     writer.add_scalar("eval/return", stats["average_return"], global_step)
     writer.add_scalar("eval/total_unsafe", stats["average_cost"], global_step)
@@ -634,3 +643,5 @@ if __name__ == "__main__":
     envs.close()
     eval_envs.close()
     writer.close()
+
+

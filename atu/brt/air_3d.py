@@ -11,17 +11,17 @@ g = Grid(
     [2],
 )
 car_r = 0.2
-car_brt = Air3D(r=car_r, u_mode="max", d_mode="min")
+car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.1, wp_max=1.1, ve=0.6, vp=0.6)
 
 if __name__ in "__main__":
     from odp.Shapes.ShapesFunctions import *
     from odp.Plots.plot_options import *
     from odp.solver import HJSolver
 
-    ivf = CylinderShape(g, [2], np.zeros(3), 0.5)
+    ivf = CylinderShape(g, [2], np.zeros(3), 0.25)
 
     def brt(d=True):
-        lookback_length = 3.0
+        lookback_length = 5.0
         t_step = 0.05
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)

@@ -75,9 +75,9 @@ class DubinsHallwayEnv(gym.Env):
         self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
 
         self.observation_space = Box(
-            low=-self.world_boundary,
-            high=self.world_boundary,
-            shape=(3,),
+            low=-np.array([-4.5, -4.5, -1, -1]),
+            high=np.array([4.5, 4.5, 1, 1]),
+            shape=(4,),
             dtype=np.float32,
         )
 
@@ -111,10 +111,10 @@ class DubinsHallwayEnv(gym.Env):
             ):  # place car in location that is always possible to avoid obstacle
                 break
 
+        self.v_sm1 = self.grid.get_value(self.max_over_min_brt, self.car.x)
         self.car.x = np.array(self.car.x, dtype=np.float32)
         self.state = np.copy(self.car.x)
-        return np.copy(self.state)
-
+        return self.wrap_obs(self.state)
     def step(self, action: np.array):
         if isinstance(action, dict):
             used_hj = action["used_hj"]
@@ -203,12 +203,21 @@ class DubinsHallwayEnv(gym.Env):
 
         # cost is based on distance to obstacle
         info["hj_value"] = self.grid.get_value(self.brt, self.state)
+        info['hj_dt'] = info['hj_value'] - self.v_sm1
+        self.v_sm1 = info['hj_value']
         # if info["hj_value"] < 0:
         # print(f"er: {self.state}")
 
         # self.hist.append(np.copy(self.state))
 
-        return np.copy(self.state), reward, done, info
+        return self.wrap_obs(self.state), reward, done, info
+
+    
+    def wrap_obs(self, state):
+        return np.array([state[0] ,state[1], np.cos(state[2]), np.sin(state[2])])
+
+    def unwrap_obs(self, state):
+        return np.array([state[0], state[1], np.arcsin(state[2])])
 
     def simulate_step(self, state: np.array, action: np.array):
         if isinstance(action, dict):
@@ -219,6 +228,8 @@ class DubinsHallwayEnv(gym.Env):
 
         if action.shape != (1,):
             action = action[0]
+
+        state = self.unwrap_obs(state)
 
         if self.use_disturbances and self.eval:
             dist = self.opt_dist(state)
@@ -299,15 +310,16 @@ class DubinsHallwayEnv(gym.Env):
         # cost is based on distance to obstacle
         info["hj_value"] = self.grid.get_value(self.brt, state)
 
-        return np.copy(state), reward, done, info
+        return self.wrap_obs(state), reward, done, info
 
-    def reward_penalty(self, state: np.array, action: np.array):
+    def reward_penalty(self, obs: np.array, action: np.array):
         """
         calculate grad V dot f(x, u)
         """
-        assert len(state.shape) == 1
+        assert len(obs.shape) == 1
         assert len(action.shape) == 1
 
+        state = self.unwrap_obs(obs)
         index = self.grid.get_index(state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
         dstb = self.opt_dist(state)
@@ -468,19 +480,20 @@ if __name__ in "__main__":
     for _ in range(1):
         obs = env.reset()
         env.render()
-        input()
         done = False
         t = 0
         r = 0
         diff = 0
         rp = 0
         while not done:
-            action = -env.opt_ctrl()
-            next_obs, reward, done, info = env.step(action)
-            # print(env.brt_value(obs), env.brt_value(next_obs), abs(env.brt_value(obs)-env.brt_value(next_obs)), env.reward_penalty(obs, action))
-            print(abs(env.brt_value(obs)-env.brt_value(next_obs)), env.reward_penalty(obs, action))
-            diff += abs(env.brt_value(obs)-env.brt_value(next_obs))
-            rp += env.reward_penalty(obs, action)
+            action = env.opt_ctrl()
+            next_obs, reward, done, info = env.step(-action)
+            print(info['hj_value'], info['hj_dt'])
+            # # print(env.brt_value(obs), env.brt_value(next_obs), abs(env.brt_value(obs)-env.brt_value(next_obs)), env.reward_penalty(obs, action))
+            # print(abs(env.brt_value(obs)-env.brt_value(next_obs)), env.reward_penalty(obs, action))
+            # diff += abs(env.brt_value(obs)-env.brt_value(next_obs))
+            # rp += env.reward_penalty(obs, action)
+            env.render()
             obs=  next_obs
             r += reward
             t += 1
@@ -489,5 +502,3 @@ if __name__ in "__main__":
                 print(info, t, r)
                 break
     env.close()
-
-    print(diff / t, rp / t)
