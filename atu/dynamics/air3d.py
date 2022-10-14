@@ -85,7 +85,6 @@ class Air3D:
         pass
 
     def opt_dstb_non_hcl(self, spat_deriv):
-        opt_wp = 0
         if self.d_mode == "max":
             if spat_deriv[2] >= 0:
                 opt_wp = self.wp_max

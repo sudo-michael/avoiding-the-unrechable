@@ -2,7 +2,8 @@ import gym
 import os
 from gym.spaces import Box
 from atu.brt.brt_3D import g as grid
-from atu.brt.air_3d import car_brt
+from atu.brt.brt_air_3d import car_brt
+from atu.brt.brt_air_3d import cylinder_r
 from atu.utils import spa_deriv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,7 +31,7 @@ class ReachAvoid3DEnv(gym.Env):
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        self.brt = np.load(os.path.join(dir_path, "assets/brts/air3d_brt.npy"))
+        self.brt = np.load(os.path.join(dir_path, "assets/brts/air3d_brt_test.npy"))
         self.car = car_brt
         self.dt = 0.05
         self.action_space = Box(low=-1 * self.car.we_max, high=self.car.we_max, dtype=np.float32, shape=(1,))
@@ -54,8 +55,18 @@ class ReachAvoid3DEnv(gym.Env):
         self.grid = grid
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
-        self.evader_state = np.array([1, 1, -1])
-        self.persuer_state = np.array([-1, -1, 0])
+        # yes
+        # self.evader_state = np.array([0, 0, 0])
+        self.evader_state = np.array([0, 0, np.pi])
+        # self.evader_state = np.array([0, 0, -np.pi/2])
+        # self.evader_state = np.array([0, 0, np.pi/2])
+        self.persuer_state = np.array([2, 0, np.pi])
+        # no
+        # self.evader_state = np.array([0, 0, -np.pi])
+        # self.persuer_state = np.array([2, 0, 0])
+        
+        
+
         self.goal_location = np.array([2, 2, 0.2])
 
         # self.hist = []
@@ -65,19 +76,25 @@ class ReachAvoid3DEnv(gym.Env):
 
     def step(self, action: np.array):
         opt_ctrl = self.opt_ctrl()
-        self.evader_state = self.car.dynamics_non_hcl(0, self.evader_state, opt_ctrl, is_evader=True) * self.dt + self.evader_state
+        # self.evader_state = self.car.dynamics_non_hcl(0, self.evader_state, opt_ctrl, is_evader=True) * self.dt + self.evader_state
+        # self.evader_state[2] = self.normalize_angle(self.evader_state[2])
         opt_dstb = self.opt_dstb()
         self.persuer_state = self.car.dynamics_non_hcl(0, self.persuer_state, opt_dstb, is_evader=False) * self.dt + self.persuer_state
+        self.persuer_state[2] = self.normalize_angle(self.persuer_state[2])
 
+        print(f"{self.evader_state=}")
+        print(f"{self.persuer_state=}")
+        print(f"{self.relative_state(self.persuer_state, self.evader_state)}")
         done = False
 
-        if np.linalg.norm(self.relative_state(self.persuer_state, self.evader_state)[:2]) <= 0.5:
+        if np.linalg.norm(self.relative_state(self.persuer_state, self.evader_state)[:2]) <= cylinder_r:
+            print('capture')
             done = True
 
         relative_state = self.relative_state(self.persuer_state, self.evader_state)
-        print(f"rel state: {relative_state}, {np.linalg.norm(relative_state)}")
+        # print(f"rel state: {relative_state}, {np.linalg.norm(relative_state)}")
         index = self.grid.get_index(relative_state)
-        print(f'value: = {self.brt[index]}')
+        # print(f'value: = {self.brt[index]}')
 
         return {
             'persuer_state': np.copy(self.persuer_state),
@@ -166,7 +183,10 @@ class ReachAvoid3DEnv(gym.Env):
         index = self.grid.get_index(relative_state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
         opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
+        print(f"spa deriv: {spat_deriv[2]}, {opt_dstb}")
+        
         return opt_dstb
+
     def opt_ctrl(self):
         relative_state = self.relative_state(self.persuer_state, self.evader_state)
         index = self.grid.get_index(relative_state)
@@ -179,7 +199,8 @@ if __name__ in "__main__":
     env.render()
     import time
     for _ in range(200):
-        obs, reward, done, info = env.step(np.array([0]))
+        action = env.action_space.sample()
+        obs, reward, done, info = env.step(action)
         if done:
             print('done')
             break
