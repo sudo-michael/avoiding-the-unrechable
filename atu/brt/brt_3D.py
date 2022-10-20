@@ -7,9 +7,7 @@ g = Grid(
     np.array([-4.5, -4.5, -np.pi]),
     np.array([4.5, 4.5, np.pi]),
     3,
-    np.array([80, 80, 80
-
-]),
+    np.array([80, 80, 80]),
     [2],
 )
 dist = np.array([0.1, 0.1, 0.1])
@@ -84,7 +82,7 @@ if __name__ in "__main__":
         if d:
             car_ra.dMax = dist
             car_ra.dMix = -dist
-        compMethods = { "TargetSetMode": "minVWithV0"}
+        compMethods = {"TargetSetMode": "minVWithV0"}
         result = HJSolver(
             car_ra,
             g,
@@ -108,14 +106,14 @@ if __name__ in "__main__":
         t_step = 0.05
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
-        compMethods = { "TargetSetMode": "minVWithVTarget",
-                        "ObstacleSetMode": "maxVWithObstacle"}
-
+        compMethods = {
+            "TargetSetMode": "minVWithVTarget",
+            "ObstacleSetMode": "maxVWithObstacle",
+        }
 
         if d:
             car_brt.dMax = dist
             car_brt.dMix = -dist
-
 
         result = HJSolver(
             car_ra,
@@ -134,5 +132,4 @@ if __name__ in "__main__":
         else:
             np.save("./atu/envs/assets/ras/hallway.npy", result)
 
-        
     ra(d=True)

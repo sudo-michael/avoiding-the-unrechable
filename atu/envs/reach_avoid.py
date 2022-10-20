@@ -1,7 +1,7 @@
 import gym
 import os
 from gym.spaces import Box
-from atu.brt.brt_3D import g as grid
+from atu.brt.brt_air_3d import g as grid
 from atu.brt.brt_air_3d import car_brt
 from atu.brt.brt_air_3d import cylinder_r
 from atu.utils import spa_deriv
@@ -56,15 +56,25 @@ class ReachAvoid3DEnv(gym.Env):
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
         # yes
-        # self.evader_state = np.array([0, 0, 0])
-        self.evader_state = np.array([0, 0, np.pi])
-        # self.evader_state = np.array([0, 0, -np.pi/2])
-        # self.evader_state = np.array([0, 0, np.pi/2])
+        self.evader_state = np.array([0, 0, 0])
         self.persuer_state = np.array([2, 0, np.pi])
-        # no
-        # self.evader_state = np.array([0, 0, -np.pi])
-        # self.persuer_state = np.array([2, 0, 0])
+        print(self.relative_state(self.persuer_state, self.evader_state))
+        index = self.grid.get_index(self.relative_state(self.persuer_state, self.evader_state))
+        print(self.grid.grid_points[0][index[0]], self.grid.grid_points[1][index[1]], self.grid.grid_points[2][index[2]])
         
+        # no
+        self.evader_state = np.array([0, 0, -np.pi])
+        self.persuer_state = np.array([-2, 0, 0])
+        print(self.relative_state(self.persuer_state, self.evader_state))
+        index = self.grid.get_index(self.relative_state(self.persuer_state, self.evader_state))
+        print(self.grid.grid_points[0][index[0]], self.grid.grid_points[1][index[1]], self.grid.grid_points[2][index[2]])
+
+        self.evader_state = np.array([0, 0, np.pi/2])
+        self.persuer_state = np.array([-2, 0, 0])
+        print(self.relative_state(self.persuer_state, self.evader_state))
+        index = self.grid.get_index(self.relative_state(self.persuer_state, self.evader_state))
+
+        exit()
         
 
         self.goal_location = np.array([2, 2, 0.2])
@@ -129,6 +139,7 @@ class ReachAvoid3DEnv(gym.Env):
         relative_state[2] = self.normalize_angle(relative_state[2])
 
         index = self.grid.get_index(relative_state)
+        print(self.grid.grid_points[0][index[0]], self.grid.grid_points[1][index[1]], self.grid.grid_points[2][index[2]])
         X, Y = np.meshgrid(
             np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
             np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
@@ -138,18 +149,18 @@ class ReachAvoid3DEnv(gym.Env):
         self.ax.contour(
             X + self.evader_state[0],
             Y + self.evader_state[1],
-            self.brt[:, :, index[2]].transpose(),
+            self.brt[:, :, index[2]],
             levels=[0.2],
         )
 
         
 
         # walls
-        self.ax.hlines(y=[-4.5, 4.5], xmin=[-4.5, -4.5], xmax=[4.5, 4.5], color="k")
-        self.ax.vlines(x=[-4.5, 4.5], ymin=[-4.5, -4.5], ymax=[4.5, 4.5], color="k")
+        # self.ax.hlines(y=[-4.5, 4.5], xmin=[-4.5, -4.5], xmax=[4.5, 4.5], color="k")
+        # self.ax.vlines(x=[-4.5, 4.5], ymin=[-4.5, -4.5], ymax=[4.5, 4.5], color="k")
 
-        self.ax.set_xlim(-5, 5)
-        self.ax.set_ylim(-5, 5)
+        # self.ax.set_xlim(-5, 5)
+        # self.ax.set_ylim(-5, 5)
         self.ax.set_aspect("equal")
         self.ax.set_xlabel("x")
         self.ax.set_ylabel("y")
@@ -163,6 +174,7 @@ class ReachAvoid3DEnv(gym.Env):
         if mode == "human":
             self.fig.canvas.flush_events()
             plt.pause(1 / self.metadata["render_fps"])
+            # plt.show()
         return img
 
     def close(self):

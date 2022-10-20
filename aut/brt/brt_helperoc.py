@@ -4,16 +4,15 @@ from atu.dynamics.air3d import Air3D
 from odp.Grid.GridProcessing import Grid
 
 g = Grid(
-    np.array([-3, -3, -np.pi]),
-    np.array([3, 3, np.pi]),
+    np.array([-1, -1, -np.pi]),
+    np.array([1, 1, np.pi]),
     3,
-    np.array([101, 101, 101]),
+    np.array([11, 11, 21]),
     [2],
 )
 car_r = 0.2
-car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.5, ve=1.0, vp=1.0)
-
-cylinder_r = car_r + car_r + 0.1
+car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.0, wp_max=1.0, ve=1.0, vp=1.0)
+cylinder_r = 0.25
 
 if __name__ in "__main__":
     from odp.Shapes.ShapesFunctions import *
@@ -23,7 +22,7 @@ if __name__ in "__main__":
     ivf = CylinderShape(g, [2], np.zeros(3), cylinder_r)
 
     def brt(d=True):
-        lookback_length = 2.0
+        lookback_length = 0.5
         t_step = 0.05
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
@@ -42,6 +41,6 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save("./atu/envs/assets/brts/air3d_brt_test.npy", result)
+        np.save("./odp_air3d", result)
 
-    brt(d=False)
+    brt()
